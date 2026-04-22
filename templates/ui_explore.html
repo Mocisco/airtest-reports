@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block title %}自动探索与 Pending 标注{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto p-6 space-y-4">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">🧭 自动探索 + Pending 标注</h1>
+      <p class="text-sm text-gray-500 mt-1">
+        这里标注的是“结构”：<span class="font-semibold">从哪个界面（state）点了哪个 UI（action）</span>，进入了<span class="font-semibold">哪个界面（next state）</span>，以及失败如何回退（rollback）。
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/ui_label" class="px-4 py-2 rounded border border-gray-300 bg-white hover:bg-gray-50 text-sm font-semibold">UI 字典标注台</a>
+      <a href="/" class="px-4 py-2 rounded border border-gray-300 bg-white hover:bg-gray-50 text-sm font-semibold">返回主页</a>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-lg shadow border border-gray-200 p-4 space-y-3">
+    <div class="flex flex-wrap items-end gap-3">
+      <div class="flex flex-col">
+        <label class="text-xs text-gray-500">设备序列号 / IP:PORT</label>
+        <input id="serial" class="border rounded px-3 py-2 text-sm w-[280px]" placeholder="例如 10.254.xx.xx:5872" />
+      </div>
+      <div class="flex flex-col">
+        <label class="text-xs text-gray-500">from_state（可空，自动识别）</label>
+        <input id="fromState" class="border rounded px-3 py-2 text-sm w-[220px]" placeholder="例如 main_city" />
+      </div>
+      <div class="flex flex-col">
+        <label class="text-xs text-gray-500">单步探索参数</label>
+        <div class="flex items-center gap-2">
+          <input id="maxCandidates" type="number" class="border rounded px-3 py-2 text-sm w-[110px]" value="60" />
+          <input id="settleWait" type="number" step="0.1" class="border rounded px-3 py-2 text-sm w-[110px]" value="1.0" />
+          <input id="diffTh" type="number" step="0.1" class="border rounded px-3 py-2 text-sm w-[110px]" value="2.2" />
+          <input id="maxSteps" type="number" class="border rounded px-3 py-2 text-sm w-[110px]" value="120" />
+        </div>
+        <div class="text-[11px] text-gray-500 mt-1">依次为：max_candidates / settle_wait / diff_threshold / max_steps（探索全部时生效）</div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="btnExplore" class="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-semibold">探索一步</button>
+        <button id="btnExploreAll" class="px-4 py-2 rounded bg-indigo-500 text-white hover:bg-indigo-600 text-sm font-semibold">探索全部</button>
+        <button id="btnReload" class="px-4 py-2 rounded bg-gray-800 text-white hover:bg-black text-sm font-semibold">刷新 Pending</button>
+        <span id="hint" class="text-xs text-gray-500"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between">
+    <div class="text-sm text-gray-600">
+      <span id="stat"></span>
+    </div>
+    <div class="text-xs text-gray-500">提示：优先标注 <span class="font-semibold">changed=true</span> 的记录；changed=false 通常是“点击无反应/点到了空白”。</div>
+  </div>
+
+  <div id="pending" class="space-y-4"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function esc(s){
+  return String(s||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+function fileUrl(rel){ return `/files/${encodeURIComponent(rel)}`; }
+function tplUrl(rel){ return `/tpl/${encodeURIComponent(rel)}`; }
+
+let PENDING = [];
+
+let __EXPLORE_ALL_INFLIGHT = false;
+let __EXPLORE_STEP_INFLIGHT = false;
+
+async function exploreStep(){
+  const serial = (document.getElementById('serial').value||'').trim();
+  if(!serial){ alert('请填写 serial'); return; }
+  const from_state = (document.getElementById('fromState').value||'').trim();
+  const max_candidates = parseInt(document.getElementById('maxCandidates').value||'60',10);
+  const settle_wait = parseFloat(document.getElementById('settleWait').value||'1.0');
+  const diff_threshold = parseFloat(document.getElementById('diffTh').value||'2.2');
+
+  if(__EXPLORE_STEP_INFLIGHT){ return; }
+  __EXPLORE_STEP_INFLIGHT = true;
+  const btn = document.getElementById('btnExplore');
+  btn.disabled = true;
+  document.getElementById('hint').innerText = '探索中...';
+  try{
+    const r = await fetch('/api/ui/explore_step', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({serial, from_state, max_candidates, settle_wait, diff_threshold})
+    });
+    const j = await r.json();
+    if(!j.success){ alert(j.msg || '探索失败'); return; }
+    document.getElementById('hint').innerText = '✅ 已生成一条 pending';
+    await loadPending();
+  }finally{
+    __EXPLORE_STEP_INFLIGHT = false;
+    btn.disabled = false;
+  }
+}
+
+async function exploreAll(){
+  if(__EXPLORE_ALL_INFLIGHT){ return; }
+  const serial = (document.getElementById('serial').value||'').trim();
+  if(!serial){ alert('请填写 serial'); return; }
+  const from_state = (document.getElementById('fromState').value||'').trim();
+  const max_candidates = parseInt(document.getElementById('maxCandidates').value||'180',10);
+  const settle_wait = parseFloat(document.getElementById('settleWait').value||'1.0');
+  const diff_threshold = parseFloat(document.getElementById('diffTh').value||'2.2');
+  const max_steps = parseInt(document.getElementById('maxSteps')?.value||'120',10);
+
+  const btn = document.getElementById('btnExploreAll');
+  btn.disabled = true;
+  __EXPLORE_ALL_INFLIGHT = true;
+  document.getElementById('hint').innerText = '探索全部中...（会逐个点击候选点并自动回退）';
+  try{
+    const r = await fetch('/api/ui/explore_all', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({serial, from_state, max_candidates, settle_wait, diff_threshold, max_steps})
+    });
+    const j = await r.json();
+    if(!j.success){ alert(j.msg || '探索失败'); return; }
+    const res = j.result || {};
+    document.getElementById('hint').innerText = `✅ 探索完成：created=${res.created||0}/${res.total||0}（reason=${res.reason||'done'}）`;
+    await loadPending();
+  }finally{
+    __EXPLORE_ALL_INFLIGHT = false;
+    btn.disabled = false;
+  }
+}
+
+async function loadPending(){
+  const r = await fetch('/api/ui/pending_list');
+  const j = await r.json();
+  if(!j.success){ alert(j.msg || '加载失败'); return; }
+  PENDING = j.items || [];
+  render();
+}
+
+function recCard(rec){
+  const id = esc(rec.id);
+  const status = rec.status || 'pending';
+  const changed = !!rec.changed;
+  const diff = (rec.diff||0).toFixed ? rec.diff.toFixed(2) : rec.diff;
+  const cand = rec.candidate || {};
+  const candFn = cand.filename || '';
+  const fromState = rec.from_state || '';
+  const toGuess = rec.to_state_guess || '';
+  const before = rec.before || '';
+  const after = rec.after || '';
+  const disabled = (status !== 'pending') ? 'disabled' : '';
+
+  return `
+  <div class="bg-white border rounded-lg shadow-sm overflow-hidden">
+    <div class="p-3 flex flex-wrap items-center justify-between gap-2 border-b">
+      <div class="text-sm font-semibold text-gray-800">
+        ${changed ? '✅' : '⚠️'} Pending ${id}
+        <span class="ml-2 text-xs px-2 py-0.5 rounded ${status==='pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">${esc(status)}</span>
+        <span class="ml-2 text-xs text-gray-500">diff=${esc(diff)} | serial=${esc(rec.serial||'')}</span>
+      </div>
+      <div class="text-xs text-gray-500">from=<span class="font-mono">${esc(fromState||'__unknown__')}</span> → guess=<span class="font-mono">${esc(toGuess||'')}</span></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 p-3">
+      <div class="space-y-2">
+        <div class="text-xs text-gray-500">点击的候选（action 图块）</div>
+        <div class="bg-gray-50 rounded border flex items-center justify-center h-56">
+          ${candFn ? `<img src="${tplUrl(candFn)}" class="max-h-full max-w-full" />` : '<div class="text-xs text-gray-400">无</div>'}
+        </div>
+        <div class="text-[11px] text-gray-500 break-words">${esc(candFn)}</div>
+      </div>
+
+      <div class="space-y-2">
+        <div class="text-xs text-gray-500">before</div>
+        <div class="bg-gray-50 rounded border flex items-center justify-center h-56">
+          ${before ? `<img src="${fileUrl(before)}" class="max-h-full max-w-full" />` : '<div class="text-xs text-gray-400">无</div>'}
+        </div>
+        <div class="text-[11px] text-gray-500 break-words">${esc(before)}</div>
+      </div>
+
+      <div class="space-y-2">
+        <div class="text-xs text-gray-500">after</div>
+        <div class="bg-gray-50 rounded border flex items-center justify-center h-56">
+          ${after ? `<img src="${fileUrl(after)}" class="max-h-full max-w-full" />` : '<div class="text-xs text-gray-400">无</div>'}
+        </div>
+        <div class="text-[11px] text-gray-500 break-words">${esc(after)}</div>
+      </div>
+    </div>
+
+    <div class="p-3 border-t bg-gray-50">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div class="flex flex-col">
+          <label class="text-xs text-gray-500">ui_label（动作名）</label>
+          <input data-id="${id}" class="ui_label border rounded px-2 py-1 text-sm" placeholder="例如 邮件" ${disabled} />
+        </div>
+        <div class="flex flex-col">
+          <label class="text-xs text-gray-500">to_state（点击后进入的界面）</label>
+          <input data-id="${id}" class="to_state border rounded px-2 py-1 text-sm" value="${esc(toGuess)}" placeholder="例如 mail_panel" ${disabled} />
+        </div>
+        <div class="flex flex-col">
+          <label class="text-xs text-gray-500">anchors（用于识别 to_state，可逗号分隔）</label>
+          <input data-id="${id}" class="anchors border rounded px-2 py-1 text-sm" placeholder="例如 邮件界面标题模板key" ${disabled} />
+        </div>
+        <div class="flex flex-col">
+          <label class="text-xs text-gray-500">入库与回退</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-xs flex items-center gap-2">
+              <input data-id="${id}" class="register w-4 h-4" type="checkbox" ${disabled} />
+              保存并入库模板
+            </label>
+            <button data-id="${id}" class="btnCommit px-3 py-1.5 rounded bg-gray-800 text-white hover:bg-black text-xs font-semibold" ${disabled}>提交</button>
+          </div>
+          <div class="text-[11px] text-gray-500 mt-1">默认 rollback=BACK（可后续扩展为“点关闭按钮模板”）</div>
+        </div>
+      </div>
+
+      <div data-id="${id}" class="msg text-xs text-gray-600 mt-2"></div>
+    </div>
+  </div>`;
+}
+
+function render(){
+  const nAll = PENDING.length;
+  const nPending = PENDING.filter(x => (x.status||'pending') === 'pending').length;
+  document.getElementById('stat').innerText = `Pending 总数 ${nAll}（未提交 ${nPending}）`;
+  document.getElementById('pending').innerHTML = PENDING.map(recCard).join('');
+
+  document.querySelectorAll('.btnCommit').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.currentTarget.getAttribute('data-id');
+      const ui_label = (document.querySelector(`.ui_label[data-id="${CSS.escape(id)}"]`)?.value || '').trim();
+      const to_state = (document.querySelector(`.to_state[data-id="${CSS.escape(id)}"]`)?.value || '').trim();
+      const anchorsRaw = (document.querySelector(`.anchors[data-id="${CSS.escape(id)}"]`)?.value || '').trim();
+      const register = !!document.querySelector(`.register[data-id="${CSS.escape(id)}"]`)?.checked;
+      const msg = document.querySelector(`.msg[data-id="${CSS.escape(id)}"]`);
+      if(!ui_label){ msg.innerText = '⚠️ ui_label 必填'; return; }
+      if(!to_state){ msg.innerText = '⚠️ to_state 必填'; return; }
+
+      msg.innerText = '提交中...';
+      const r = await fetch('/api/ui/pending_commit', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          pending_id: id,
+          ui_label,
+          to_state,
+          anchors: anchorsRaw,
+          register,
+          rollback: {type:'keyevent', value:'BACK', timeout:3}
+        })
+      });
+      const j = await r.json();
+      if(j.success){
+        msg.innerText = '✅ 已提交：已写入 ui_graph + ui_states + ui_kb';
+        await loadPending();
+      }else{
+        msg.innerText = '❌ 提交失败：' + (j.msg || 'unknown');
+      }
+    });
+  });
+}
+
+document.getElementById('btnExplore').addEventListener('click', exploreStep);
+document.getElementById('btnExploreAll').addEventListener('click', exploreAll);
+document.getElementById('btnReload').addEventListener('click', loadPending);
+loadPending();
+</script>
+{% endblock %}

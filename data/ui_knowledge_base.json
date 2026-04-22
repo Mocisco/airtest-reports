@@ -1,0 +1,5 @@
+{
+    "ui_knowledge_base_version": "1.0",
+    "description": "UI语义标注库 - 用于标注游戏中各UI元素的语义标签",
+    "annotations": {}
+}

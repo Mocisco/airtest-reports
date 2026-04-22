@@ -1,0 +1,5 @@
+{
+    "ui_states_version": "1.0",
+    "description": "UI状态定义 - 用于UI自动化状态机",
+    "states": {}
+}

@@ -1,0 +1,5 @@
+{
+    "ocr_knowledge_base_version": "1.0",
+    "description": "OCR识别知识库",
+    "Ready_Entry": ["前往征战", "点击选服", "开始游戏", "进入游戏"]
+}

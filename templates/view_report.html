@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+{% block title %}报告详情 - {{ report.date }}{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex justify-between items-center sticky top-0 z-40 bg-gray-100 py-4 shadow-sm">
+    <div class="flex items-center gap-4">
+        <a href="/" class="text-gray-500 hover:text-gray-800 font-bold text-lg">← 返回</a>
+        <h1 class="text-2xl font-bold">日期: {{ report.date }}</h1>
+    </div>
+    <div class="flex items-center gap-4">
+        {% if baseline_rid and rid == baseline_rid %}
+        <span class="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full border border-emerald-200">⭐ 当前为对比模板</span>
+        {% else %}
+        <button onclick="setAsTemplate('{{ rid }}')" class="text-sm bg-emerald-600 text-white px-3 py-1 rounded shadow hover:bg-emerald-700">⭐ 设为对比模板</button>
+        {% endif %}
+        <button onclick="toggleAll(true)" class="text-sm bg-white border px-3 py-1 rounded shadow hover:bg-gray-50">全部展开</button>
+        <button onclick="toggleAll(false)" class="text-sm bg-white border px-3 py-1 rounded shadow hover:bg-gray-50">全部折叠</button>
+        <div class="text-sm text-gray-500">{{ report.timestamp }}</div>
+    </div>
+</div>
+
+
+{% if report.archived %}
+<div class="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm">
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <div class="font-bold text-yellow-800">📦 本日期截图已归档</div>
+            <div class="text-sm text-yellow-700 mt-1">
+                该日期的本地截图目录已被自动打包清理。请下载对应压缩包后解压查阅。
+            </div>
+        </div>
+        {% if report.archive_zip %}
+        <a href="/download_archive/{{ report.archive_zip }}" class="text-sm bg-yellow-600 text-white px-3 py-2 rounded hover:bg-yellow-700 shadow">
+            下载压缩包：{{ report.archive_zip }}
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<div id="report-container">
+{% for device, data in report.devices.items() %}
+    {% set devIndex = loop.index %}
+    <div class="device-block bg-white rounded-lg shadow-lg mb-6 overflow-hidden border border-gray-200" id="device-{{ devIndex }}">
+        <div class="bg-gray-50 px-6 py-4 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition select-none" 
+             onclick="toggleSection('body-{{ devIndex }}', 'icon-{{ devIndex }}')">
+            <div class="flex items-center gap-3">
+                <span id="icon-{{ devIndex }}" class="transform transition-transform duration-200 text-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </span>
+                <h2 class="text-xl font-bold text-gray-800">{{ device }}</h2>
+                <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                    包含 {{ data.extreme|length + data.balanced|length + data.power|length }} 张截图
+                </span>
+            </div>
+            <span class="text-xs text-gray-400 hidden md:block">
+                点击折叠/展开 · 点击图片进入对比模式
+            </span>
+        </div>
+        
+        <div id="body-{{ devIndex }}" class="transition-all duration-300 ease-in-out origin-top">
+            <div class="p-6 grid grid-cols-3 gap-6 border-t border-gray-100">
+                
+                {% macro render_grid(title, color, items, icon) %}
+                <div class="col-span-1 border-gray-200 border-dashed {{ 'border-l border-r px-2' if color == 'blue' else '' }}">
+                    <h3 class="text-center font-bold text-{{ color }}-600 mb-4 pb-2 border-b-2 border-{{ color }}-200 flex justify-center items-center gap-2">
+                        {{ icon }} {{ title }} 
+                        <span class="text-xs bg-{{ color }}-100 px-2 rounded-full">{{ items|length }}</span>
+                    </h3>
+                    <div class="space-y-4">
+                        {% for img in items %}
+                        <div class="group relative bg-gray-50 rounded-lg p-1 border border-gray-100 hover:border-{{ color }}-400 transition cursor-zoom-in"
+                             onclick="openLightbox(this.querySelector('img'))">
+                            {% if img.flags and img.flags|length > 0 %}
+                            <div class="absolute top-2 left-2 bg-red-600 text-white text-[11px] px-2 py-1 rounded shadow"
+                                 title="{{ img.flags|join(', ') }}">⚠ 异常</div>
+                            {% endif %}
+                            <img src="{{ img.thumb_path or img.path }}" 
+                                 data-src="{{ img.path }}" 
+                                 data-device="device-{{ devIndex }}"
+                                 data-device-name="{{ device }}" 
+                                 data-filename="{{ img.filename }}"
+                                 data-group-type="{{ img.mode }}"
+                                 alt="{{ img.filename }}"
+                                 loading="lazy"
+                                 class="gallery-img w-full h-auto object-contain rounded shadow-sm block bg-white"
+                                 style="min-height: 120px;"
+                                 onerror="this.onerror=null;this.src='/static/img-broken.png';">
+                            <p class="text-xs text-gray-500 mt-2 text-center truncate px-2 pb-1">{{ img.filename }}</p>
+                        </div>
+                        {% else %}
+                        <div class="text-center text-gray-300 py-8 text-sm bg-gray-50 rounded border border-dashed">无图片</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endmacro %}
+
+                {{ render_grid(display.power, 'green', data.power, '低') }}
+                {{ render_grid(display.balanced, 'blue', data.balanced, '中') }}
+                {{ render_grid(display.extreme, 'red', data.extreme, '高') }}
+
+            </div>
+        </div>
+    </div>
+{% endfor %}
+</div>
+
+<!-- ==================== 修复后的 Lightbox（关键修复点） ==================== -->
+<div id="lightbox" class="fixed inset-0 z-[9999] hidden bg-black bg-opacity-95 flex items-center justify-center select-none">
+    <!-- 关闭按钮 -->
+    <button class="absolute top-4 right-4 text-white text-5xl hover:text-gray-300 z-50 transition" 
+            onclick="closeLightbox()">×</button>
+
+    <!-- 顶部信息栏（最高层） -->
+    <div class="absolute top-0 left-0 right-0 p-6 bg-gradient-to-b from-black/80 to-transparent pointer-events-none z-40">
+        <div class="flex flex-col items-center gap-3 pointer-events-auto">
+            <div id="lb-device-name" class="text-white text-2xl font-bold tracking-wider drop-shadow-lg">Device Name</div>
+            <div id="lb-filename" class="text-gray-200 text-lg bg-white/10 backdrop-blur px-6 py-2 rounded-full border border-white/30">Filename.png</div>
+
+            <div class="flex items-center gap-4 mt-3 bg-white/10 backdrop-blur px-5 py-2 rounded-full border border-white/20">
+                <span class="text-gray-300 text-sm">浏览模式：</span>
+                <button id="lb-mode-device" class="px-4 py-1.5 rounded-full bg-white/40 text-gray-900 font-bold text-sm transition hover:bg-white/60" 
+                        onclick="setLightboxMode('device', event)">单设备</button>
+                <button id="lb-mode-scene" class="px-4 py-1.5 rounded-full bg-white/20 text-gray-200 font-medium text-sm transition hover:bg-white/40" 
+                        onclick="setLightboxMode('scene', event)">跨设备</button>
+            </div>
+
+            <div id="lb-counter" class="text-gray-400 text-sm mt-2">1 / 1</div>
+        </div>
+    </div>
+
+    <!-- 左右切换按钮（最高层） -->
+    <button class="absolute left-6 top-1/2 -translate-y-1/2 text-white p-5 bg-black/50 hover:bg-black/70 rounded-full backdrop-blur z-50 transition group"
+            onclick="changeImage(-1, event)">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 group-hover:-translate-x-1 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+    </button>
+
+    <button class="absolute right-6 top-1/2 -translate-y-1/2 text-white p-5 bg-black/50 hover:bg-black/70 rounded-full backdrop-blur z-50 transition group"
+            onclick="changeImage(1, event)">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 group-hover:translate-x-1 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+    </button>
+
+    <!-- 大图（放在最底层） -->
+    <div class="relative flex items-center justify-center w-full h-full px-32">
+        <img id="lb-image" src="" 
+             class="max-w-full max-h-full object-contain shadow-2xl rounded-lg"
+             onclick="event.stopPropagation()">
+    </div>
+</div>
+
+<script>
+async function setAsTemplate(rid){
+    if(!rid) return;
+    if(!confirm('将该报告设置为【对比模板】？\n\n后续在“差异对比”页会默认使用此模板作为左侧基准。')){
+        return;
+    }
+    try{
+        const r = await fetch('/api/template/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rid })
+        });
+        const j = await r.json();
+        if(j.success){
+            window.location.reload();
+        }else{
+            alert('设置失败：' + (j.msg || 'unknown'));
+        }
+    }catch(e){
+        console.error(e);
+        alert('请求异常');
+    }
+}
+
+// 预设场景排序（可自行调整顺序）
+const SCENE_PREFERRED_ORDER = ["渡口", "粮食", "山", "河流", "营帐"];
+const TYPE_ORDER = ["power", "balanced", "extreme"];
+
+let currentImages = [];
+let currentIndex = 0;
+let lastSwitchTime = 0;
+let lbMode = 'device';
+let lastContext = null;
+
+const lightbox = document.getElementById('lightbox');
+const lbImage = document.getElementById('lb-image');
+const lbFilename = document.getElementById('lb-filename');
+const lbDeviceName = document.getElementById('lb-device-name');
+const lbCounter = document.getElementById('lb-counter');
+
+function openLightbox(imgElement) {
+    const filename = imgElement.getAttribute('data-filename') || '';
+    const type = imgElement.getAttribute('data-group-type') || '';
+    const deviceId = imgElement.getAttribute('data-device') || '';
+    const deviceName = imgElement.getAttribute('data-device-name') || '';
+    const src = imgElement.getAttribute('data-src');
+
+    let sceneKey = filename.split('_')[0] || '未知场景';
+    lastContext = { sceneKey, type, deviceId, deviceName, src, filename };
+
+    buildCurrentImages();
+    currentIndex = currentImages.findIndex(item => item.src === src);
+    if (currentIndex === -1) currentIndex = 0;
+
+    updateLightboxContent();
+    lightbox.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    updateModeButtons();
+}
+
+function buildCurrentImages() {
+    if (!lastContext) return;
+    currentImages = [];
+
+    if (lbMode === 'device') buildDeviceModeImages();
+    else buildSceneModeImages();
+}
+
+function buildDeviceModeImages() {
+    const container = document.getElementById(lastContext.deviceId);
+    if (!container) return;
+
+    const imgs = Array.from(container.querySelectorAll('.gallery-img'));
+    const groups = {};
+
+    imgs.forEach(img => {
+        const fn = img.getAttribute('data-filename') || '';
+        const scene = fn.split('_')[0];
+        if (!groups[scene]) groups[scene] = [];
+        groups[scene].push({
+            src: img.getAttribute('data-src'),
+            filename: fn,
+            type: img.getAttribute('data-group-type'),
+            deviceName: img.getAttribute('data-device-name')
+        });
+    });
+
+    const orderedScenes = [
+        ...SCENE_PREFERRED_ORDER.filter(s => groups[s]),
+        ...Object.keys(groups).filter(s => !SCENE_PREFERRED_ORDER.includes(s)).sort()
+    ];
+
+    orderedScenes.forEach(scene => {
+        const list = groups[scene];
+        list.sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type));
+        currentImages.push(...list);
+    });
+}
+
+function buildSceneModeImages() {
+    const sceneKey = lastContext.sceneKey;
+    const allImgs = Array.from(document.querySelectorAll('.gallery-img'));
+    const matched = [];
+
+    allImgs.forEach(img => {
+        const fn = img.getAttribute('data-filename') || '';
+        if (fn.startsWith(sceneKey + '_') || fn === sceneKey + '.png') {
+            matched.push({
+                src: img.getAttribute('data-src'),
+                filename: fn,
+                type: img.getAttribute('data-group-type'),
+                deviceName: img.getAttribute('data-device-name')
+            });
+        }
+    });
+
+    const devices = [...new Set(matched.map(i => i.deviceName))].sort();
+    TYPE_ORDER.forEach(t => {
+        devices.forEach(dev => {
+            const list = matched.filter(i => i.type === t && i.deviceName === dev);
+            list.sort((a, b) => a.filename.localeCompare(b.filename));
+            currentImages.push(...list);
+        });
+    });
+}
+
+function updateLightboxContent() {
+    if (currentImages.length === 0) return;
+    const item = currentImages[currentIndex];
+
+    lbImage.src = item.src;
+    lbDeviceName.textContent = item.deviceName;
+
+    let typeHtml = '';
+    if (item.type === 'extreme') typeHtml = '<span class="text-red-400 font-bold">极致</span>';
+    else if (item.type === 'balanced') typeHtml = '<span class="text-blue-400 font-bold">均衡</span>';
+    else if (item.type === 'power') typeHtml = '<span class="text-green-400 font-bold">省电</span>';
+
+    lbFilename.innerHTML = `${typeHtml} <span class="mx-2 text-gray-500">|</span> ${item.filename}`;
+    lbCounter.textContent = `${currentIndex + 1} / ${currentImages.length}`;
+
+    lastContext.sceneKey = item.filename.split('_')[0];
+    lastContext.deviceName = item.deviceName;
+}
+
+function changeImage(dir, e) {
+    if (e) e.stopPropagation();
+    const now = Date.now();
+    if (now - lastSwitchTime < 120) return;
+    lastSwitchTime = now;
+
+    currentIndex = (currentIndex + dir + currentImages.length) % currentImages.length;
+    updateLightboxContent();
+}
+
+function setLightboxMode(mode, e) {
+    e.stopPropagation();
+    lbMode = mode;
+    buildCurrentImages();
+    currentIndex = 0;
+    updateLightboxContent();
+    updateModeButtons();
+}
+
+function updateModeButtons() {
+    const btnDevice = document.getElementById('lb-mode-device');
+    const btnScene = document.getElementById('lb-mode-scene');
+    if (lbMode === 'device') {
+        btnDevice.classList.add('bg-white/40', 'text-gray-900');
+        btnScene.classList.remove('bg-white/40', 'text-gray-900');
+        btnScene.classList.add('bg-white/20', 'text-gray-200');
+    } else {
+        btnScene.classList.add('bg-white/40', 'text-gray-900');
+        btnDevice.classList.remove('bg-white/40', 'text-gray-900');
+        btnDevice.classList.add('bg-white/20', 'text-gray-200');
+    }
+}
+
+function closeLightbox(e) {
+    if (e && (e.target.tagName === 'IMG' || e.target.closest('button'))) return;
+    lightbox.classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+// 键盘支持
+document.addEventListener('keydown', e => {
+    if (lightbox.classList.contains('hidden')) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') changeImage(-1);
+    if (e.key === 'ArrowRight') changeImage(1);
+});
+
+// 折叠功能
+function toggleSection(bodyId, iconId) {
+    const body = document.getElementById(bodyId);
+    const icon = document.getElementById(iconId);
+    body.classList.toggle('hidden');
+    icon.classList.toggle('rotate-180');
+}
+
+function toggleAll(open) {
+    document.querySelectorAll('[id^="body-"]').forEach(b => {
+        if (open) b.classList.remove('hidden');
+        else b.classList.add('hidden');
+    });
+    document.querySelectorAll('[id^="icon-"] svg').forEach(svg => {
+        if (open) svg.classList.add('rotate-180');
+        else svg.classList.remove('rotate-180');
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,17 @@
+{
+    "new_step1_agree": {"filename": "tpl_step2_protocol_text.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "new_step2_confirm_protocol": {"filename": "tplbuding.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "new_step3_enter_acc_input": {"filename": "vivojxaz.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "new_step4_click_acc_bar": {"filename": "vivojxaz.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "new_step5_enter_pwd_input": {"filename": "vivojxaz.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "new_step6_confirm_login": {"filename": "vivowc.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "new_step7_close_notice": {"filename": "tplbudingxiazai.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "new_step8_close_net_error": {"filename": "tplyujiazai.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "预加载数据": {"filename": "tplyujiazai.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "补丁下载中": {"filename": "tplbudingxiazai.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "补丁下载中大图": {"filename": "tplbudingxiazai.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "加载中": {"filename": "tplyujiazai.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "giant_login_main": {"filename": "vivojxaz.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "giant_login_phone": {"filename": "vivojxaz.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]},
+    "giant_login_title": {"filename": "vivojxaz.png", "record_pos": [0.5, 0.5], "resolution": [1080, 1920]}
+}

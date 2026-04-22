@@ -1,0 +1,1394 @@
+{% extends "base.html" %}
+{% block title %}画质对比工作台{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6">
+
+    <div class="rounded-lg shadow-lg overflow-hidden border border-gray-700 bg-gray-800">
+        <div class="p-4 cursor-pointer flex justify-between items-center hover:bg-gray-700 transition select-none" onclick="toggleAdminPanel()">
+            <div class="flex items-center gap-3">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    🛠️ 自动化测试配置与控制台
+                </h2>
+
+<a href="/ui_label" target="_blank"
+   class="ml-3 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-full shadow">
+   🧠 UI 标注台
+</a>
+
+<a href="/ui_explore" target="_blank"
+   class="ml-2 text-xs font-semibold bg-gray-800 hover:bg-black text-white px-3 py-1 rounded-full shadow">
+   🧭 自动探索
+</a>
+                <span id="globalStatus" class="text-xs font-bold bg-gray-600 text-gray-200 px-3 py-1 rounded-full transition-all">
+                    💤 休息中 (Idle)
+                </span>
+            </div>
+            <div class="flex items-center gap-2 text-gray-400">
+                <span class="text-xs">点击展开/收起</span>
+                <svg id="adminArrow" xmlns="https://www.w3.org/2000/svg" class="h-5 w-5 transform transition-transform -rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </div>
+        </div>
+
+        <!-- ✅ Tabs 已彻底移除：这里改为四模块纵向排列 -->
+        <div id="adminContent" class="hidden bg-gray-100 p-6 border-t border-gray-700 space-y-6">
+
+            <!-- ================= 1) 远程设备连接 ================= -->
+            <div class="bg-white p-6 rounded-lg shadow-md border-l-4 border-indigo-500">
+                <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    📱 远程设备连接
+                </h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- 左侧：输入/连接/云真机 -->
+                    <div class="space-y-4">
+                        <label class="block text-sm font-medium text-gray-600 mb-2">批量输入连接命令 (支持混合格式)</label>
+                        <textarea id="adbInput" class="w-full h-24 p-3 border rounded-lg font-mono text-sm bg-gray-50 focus:ring-2 focus:ring-indigo-300 outline-none resize-none"
+                            placeholder="例如：&#10;10.254.71.175:5872&#10;adb connect 192.168.1.6:5555"></textarea>
+
+                        <div class="mt-3 bg-white border border-gray-200 rounded-lg p-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="text-sm font-semibold text-gray-700">🕘 历史连接记录</div>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="selectAllHistory(true)" class="text-xs px-2 py-1 rounded bg-gray-50 border border-gray-200 hover:bg-gray-100">全选</button>
+                                    <button onclick="selectAllHistory(false)" class="text-xs px-2 py-1 rounded bg-gray-50 border border-gray-200 hover:bg-gray-100">全不选</button>
+                                    <button onclick="fillFromHistory()" class="text-xs px-2 py-1 rounded bg-gray-50 border border-gray-200 hover:bg-gray-100">填入输入框</button>
+                                    <button onclick="connectSelectedHistory()" class="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700">连接选中</button>
+                                </div>
+                            </div>
+
+                            <!-- ✅ 历史列表：仅显示设备名/机型，不展示 adb 地址 -->
+                            <div id="adbHistory" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto"></div>
+                        </div>
+
+                        <div class="mt-3 flex flex-wrap gap-3">
+                            <button onclick="connectDevices()" id="btnConnect" class="btn-primary bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 py-2 px-6 rounded w-full md:w-auto flex justify-center items-center">
+                                <span id="connText">🔌 开始连接</span>
+                                <span id="connLoading" class="hidden ml-2 animate-spin">⏳</span>
+                            </button>
+                            <button onclick="addInputToHistory()" class="btn-outline bg-white hover:bg-gray-50 text-gray-700 font-semibold border border-gray-300 shadow-sm transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 py-2 px-6 rounded w-full md:w-auto">
+                                📌 仅加入历史
+                            </button>
+                            <button onclick="autoCloudConnect()"
+                                class="btn-outline bg-white hover:bg-gray-50 text-gray-700 font-semibold border border-gray-300 shadow-sm transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 py-2 px-6 rounded w-full md:w-auto">
+                                🤖 自动占用云真机（收藏）
+                            </button>
+                        </div>
+
+                        <!-- 云真机：进度条 + 释放（修复布局 + 白底） -->
+                        <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="text-sm font-semibold text-gray-700">☁️ 云真机占用状态</div>
+                                <button onclick="releaseCloudDevices()"
+                                    id="btnReleaseCloud"
+                                    class="bg-white hover:bg-gray-50 text-gray-700 font-semibold border border-gray-300 shadow-sm transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 px-3 py-1.5 rounded flex items-center gap-2">
+                                    <span class="text-red-500">♻️</span>
+                                    <span>释放本轮占用</span>
+                                </button>
+                            </div>
+
+                            <!-- ===== 云真机占用进度条 ===== -->
+                            <div id="cloudProgressBox" class="hidden mt-3">
+                                <div id="cloudProgressText" class="text-sm text-gray-600 mb-1">准备占用云真机…</div>
+                                <div class="w-full bg-gray-200 rounded h-3 overflow-hidden">
+                                    <div id="cloudProgressBar" class="h-3 bg-indigo-600 transition-all duration-300" style="width:0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧：已连接设备列表 -->
+                    <div class="bg-gray-50 border rounded-lg p-4 h-72 flex flex-col">
+                        <div class="flex justify-between items-center mb-2 border-b pb-2 flex-shrink-0">
+                            <h4 class="font-bold text-gray-700 text-sm">已连接设备列表 (仅运行此列表中的设备)</h4>
+                            <button onclick="clearDeviceList()" class="text-xs btn-outline bg-white hover:bg-gray-50 text-gray-700 font-bold border border-gray-300 shadow-sm transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 px-2 py-1 rounded border border-gray-300 text-gray-600 hover:text-red-600 hover:border-red-200">
+                                ⚠️ 清空并断开所有
+                            </button>
+                        </div>
+                        <ul id="deviceListDisplay" class="space-y-2 text-sm overflow-y-auto flex-grow">
+                            <li class="text-gray-400 text-center py-4">暂无设备</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= 2) 批量安装 APK ================= -->
+            <div class="bg-white p-6 rounded-lg shadow-md border-l-4 border-yellow-500">
+                <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    📦 批量安装 APK
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600 mb-2">
+                            选择 APK 文件并上传到服务端
+                        </label>
+                        <div class="flex items-center gap-3">
+                            <input
+                                id="apkFileInput"
+                                type="file"
+                                accept=".apk"
+                                class="block w-full text-sm text-gray-700 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none"
+                            >
+                            <button
+                                id="btnUploadApk"
+                                onclick="uploadApk()"
+                                class="btn-secondary bg-gray-700 hover:bg-gray-800 text-white font-semibold shadow transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 px-4 py-2 rounded-lg flex items-center gap-2"
+                            >
+                                上传
+                            </button>
+                        </div>
+                        <p id="apkUploadStatus" class="mt-2 text-xs text-gray-500">
+                            尚未上传 APK
+                        </p>
+                    </div>
+                    <p class="text-xs text-gray-500">
+                        提示：批量装包会对当前「已连接设备列表」中的所有设备执行 <b>卸载/安装</b> 操作，请确认设备状态。
+                    </p>
+                </div>
+            </div>
+
+            <!-- ================= 3) 截图坐标任务 ================= -->
+            <div class="bg-white p-6 rounded-lg shadow-md border-l-4 border-indigo-500">
+                <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    🗺️ 截图坐标任务编排
+                </h3>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-1 space-y-6">
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-600 mb-3">📌 常用预设 (勾选启用)</h4>
+                            <div class="grid grid-cols-2 gap-2" id="presetList"></div>
+                        </div>
+                        <hr class="border-gray-200">
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-600 mb-2">➕ 自定义坐标</h4>
+                            <div class="space-y-2">
+                                <input type="text" id="batchInput" class="w-full p-2 border rounded text-sm font-mono" placeholder="例: 100,200">
+                                <div class="flex gap-2">
+                                    <input type="text" id="batchNameInput" class="w-1/3 p-2 border rounded text-sm" placeholder="命名(选填)">
+                                    <button onclick="addBatchCoords()" class="w-2/3 btn-primary bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 text-sm py-2 rounded">添加</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 bg-gray-50 border rounded-lg p-4 flex flex-col h-80">
+                        <div class="flex justify-between items-center mb-3 pb-2 border-b">
+                            <h4 class="font-bold text-gray-700">🚀 最终执行列表</h4>
+                            <span class="text-xs text-gray-500" id="taskCount">共 0 个任务</span>
+                        </div>
+                        <div class="overflow-y-auto flex-grow pr-2">
+                            <table class="w-full text-sm text-left">
+                                <thead class="text-xs text-gray-500 uppercase bg-gray-100 sticky top-0">
+                                    <tr>
+                                        <th class="px-3 py-2">名称</th>
+                                        <th class="px-3 py-2">X</th>
+                                        <th class="px-3 py-2">Y</th>
+                                        <th class="px-3 py-2 text-right">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="finalTaskList" class="divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= 4) 执行控制台 ================= -->
+            <div class="bg-gray-900 text-gray-200 p-6 rounded-lg shadow-lg border border-gray-700">
+                <div class="flex justify-between items-center mb-4">
+                    <div class="flex items-center gap-3">
+                        <h3 class="text-lg font-bold text-white">🤖 执行控制台</h3>
+                        <span id="socketStatus" class="text-xs bg-red-800 text-red-200 px-2 py-0.5 rounded">未连接</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-4 mb-3">
+                    <button onclick="runLoginOnly()" id="btnLogin" class="btn-primary bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 px-6 py-2 rounded flex items-center gap-2">
+                        🔐 新包登录
+                    </button>
+
+                    <button onclick="runInstall()"
+                            id="btnInstall"
+                            class="btn-secondary bg-gray-700 hover:bg-gray-800 text-white font-semibold shadow transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 px-6 py-2 rounded flex items-center gap-2">
+                        📦 批量装包
+                    </button>
+
+                    <button onclick="runTest()" id="btnRun" class="btn-primary bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 px-6 py-2 rounded flex items-center gap-2">
+                        ▶ 开始截图任务
+                    </button>
+
+                    <button onclick="stopTest()" id="btnStop" class="btn-danger bg-red-600 hover:bg-red-700 text-white font-bold shadow transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 px-6 py-2 rounded flex items-center gap-2 hidden">
+                        ⏹ 强制停止
+                    </button>
+                </div>
+
+                <div id="logWindow" class="bg-black font-mono text-xs p-4 h-64 overflow-y-auto rounded border border-gray-800 shadow-inner space-y-1 scroll-smooth">
+                    <p class="text-gray-500">>>> 系统就绪。等待指令...</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ================= 历史扫描记录 ================= -->
+    <div class="bg-white p-6 rounded-lg shadow-md text-center border-t-4 border-blue-500 mt-8">
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">📂 历史扫描记录</h1>
+        <p class="text-gray-500 mb-4 text-sm">管理和查看历史测试生成的截图报告。</p>
+
+        <button onclick="startScan()" id="scanBtn" class="btn-outline bg-white hover:bg-gray-50 text-gray-700 font-semibold border border-gray-300 shadow-sm transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 py-2 px-6 rounded-full mx-auto flex items-center shadow">
+            <span id="scanText">🔄 刷新列表</span>
+            <span id="scanLoading" class="hidden ml-2 animate-spin">⏳</span>
+        </button>
+        <p id="statusMsg" class="mt-2 text-sm text-gray-400 min-h-[20px]"></p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-12">
+        {% for rid, item in history.items() %}
+        <div class="bg-white rounded-lg shadow hover:shadow-lg transition p-5 border-l-4 border-blue-500 relative group cursor-pointer" onclick="window.location.href='/view/{{ rid }}'">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-800">{{ item.date }}</h3>
+                    <p class="text-xs text-gray-400">{{ item.timestamp }}</p>
+                </div>
+                {% if baseline_rid and rid == baseline_rid %}
+                <span class="bg-emerald-50 text-emerald-700 text-xs px-2 py-1 rounded-full border border-emerald-200">⭐ 对比模板</span>
+                {% endif %}
+                {% if item.archived %}
+                <span class="bg-yellow-50 text-yellow-700 text-xs px-2 py-1 rounded-full border border-yellow-200">📦 已归档</span>
+                {% endif %}
+                <span class="bg-indigo-50 text-indigo-700 text-xs px-2 py-1 rounded-full">{{ item.devices|length }} 台</span>
+            </div>
+            <div class="mt-4 flex flex-wrap gap-2">
+                {% for dev in item.devices.keys() %}
+                <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded border">{{ dev }}</span>
+                {% endfor %}
+            </div>
+            <div class="mt-5 flex justify-end items-center pt-2 border-t border-gray-100">
+                <button onclick="event.stopPropagation(); setAsTemplate('{{ rid }}')" class="text-emerald-600 hover:text-emerald-800 text-sm px-2 py-1 rounded hover:bg-emerald-50 transition">⭐ 设为模板</button>
+                <button onclick="event.stopPropagation(); prepareDeleteReport('{{ rid }}')" class="text-red-400 hover:text-red-600 text-sm px-2 py-1 rounded hover:bg-red-50 transition">🗑 删除</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- ================= 设备配置 Modal ================= -->
+<div id="configModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 hidden flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-white rounded-xl p-8 w-96 shadow-2xl transform scale-100 transition-all border-2 border-indigo-200">
+        <h3 class="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
+            ⚠️ 发现新设备配置
+        </h3>
+        <p class="text-gray-600 mb-6 text-sm">
+            蓝牙名称：<span id="modalModelName" class="font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">Unknown</span><br>
+            请选择该设备支持的<b class="text-gray-800">最高画质</b>：
+        </p>
+        <div class="space-y-3">
+            <button onclick="confirmQuality('极致')" class="w-full btn-outline bg-white hover:bg-gray-50 text-gray-700 font-semibold border border-gray-300 shadow-sm transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 py-3 rounded-lg flex justify-between px-4 font-bold hover:border-indigo-300">
+                <span>🔥 极致</span> <span class="text-xs font-normal text-red-400 self-center">Extreme</span>
+            </button>
+            <button onclick="confirmQuality('精致')" class="w-full btn-outline bg-white hover:bg-gray-50 text-gray-700 font-semibold border border-gray-300 shadow-sm transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 py-3 rounded-lg flex justify-between px-4 font-bold hover:border-indigo-300">
+                <span>✨ 精致</span> <span class="text-xs font-normal text-blue-400 self-center">High</span>
+            </button>
+            <button onclick="confirmQuality('均衡')" class="w-full btn-outline bg-white hover:bg-gray-50 text-gray-700 font-semibold border border-gray-300 shadow-sm transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 py-3 rounded-lg flex justify-between px-4 font-bold hover:border-indigo-300">
+                <span>⚖️ 均衡</span> <span class="text-xs font-normal text-green-400 self-center">Balanced</span>
+            </button>
+        </div>
+        <button onclick="closeModal()" class="mt-6 text-gray-400 text-sm hover:text-gray-600 w-full hover:underline">暂不配置 (跳过此设备)</button>
+    </div>
+</div>
+
+<!-- ================= 删除确认 Modal ================= -->
+<div id="deleteConfirmModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 hidden flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-white rounded-xl p-6 w-96 shadow-2xl transform scale-100 transition-all border border-gray-200">
+        <h3 class="text-lg font-bold text-gray-800 mb-2">确认删除？</h3>
+        <p class="text-sm text-gray-600 mb-4">此操作将删除该条记录。请确认是否同时物理删除本地截图文件夹。</p>
+        <label class="flex items-center space-x-2 mb-6 cursor-pointer bg-gray-50 p-3 rounded hover:bg-gray-100 border border-gray-200">
+            <input type="checkbox" id="chkDeleteLocalFile" class="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500">
+            <span class="text-sm text-gray-800 select-none">⚠️ 同时删除本地文件</span>
+        </label>
+        <div class="flex gap-3">
+            <button onclick="closeDeleteModal()" class="w-1/2 btn-outline bg-white hover:bg-gray-50 text-gray-700 font-semibold border border-gray-300 shadow-sm transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 py-2 rounded">取消</button>
+            <button onclick="confirmDeleteAction()" class="w-1/2 btn-danger bg-red-600 hover:bg-red-700 text-white font-bold shadow transition transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 py-2 rounded">确认删除</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// =================== 基础配置 ===================
+const PRESETS = [
+    { name: "粮食", x: 990, y: 971 }, { name: "装饰山", x: 1749, y: 1157 },
+    { name: "河流", x: 202, y: 273 }, { name: "营帐", x: 1025, y: 980 },
+    { name: "渡口", x: 483, y: 602 }
+];
+const STORAGE_KEY = "airtest_web_config_v7";
+const DEVICE_KEY = "connected_devices_v5";
+
+window.currentExecutionList = [];
+let customTasks = [];
+let manualCounter = 1;
+let connectedDevicesList = [];
+let pendingModelName = "";
+let pendingDeleteRid = null;
+let currentApkPath = "";
+
+// =================== 小工具 ===================
+function copyText(text) {
+    if (!text) return;
+    try {
+        navigator.clipboard.writeText(text);
+    } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+    }
+}
+
+// ✅ 控制面板展开/收起（带 localStorage，保留你的版本）
+function toggleAdminPanel(forceOpen = false) {
+    const content = document.getElementById('adminContent');
+    const arrow = document.getElementById('adminArrow');
+    const shouldOpen = forceOpen || content.classList.contains('hidden');
+
+    if (shouldOpen) {
+        content.classList.remove('hidden');
+        arrow.classList.remove('-rotate-90');
+        localStorage.setItem('adminPanelState', 'open');
+    } else {
+        content.classList.add('hidden');
+        arrow.classList.add('-rotate-90');
+        localStorage.setItem('adminPanelState', 'closed');
+    }
+}
+
+// 页面加载时，读取 localStorage 中的面板状态
+document.addEventListener("DOMContentLoaded", function() {
+    const savedState = localStorage.getItem('adminPanelState');
+    if (savedState === 'open') {
+        toggleAdminPanel(true);
+    }
+});
+
+// =================== 设备连接历史（前端本地持久化） ===================
+/**
+ * ✅ 需求：记录“累计使用时长”（按设备同名/机型 model 聚合）
+ * 数据结构（v4）：
+ * {
+ *   model, last_target, total_ms, last_ts, active_since
+ * }
+ */
+const ADB_HISTORY_KEY = "adb_connect_history_v4";
+const ADB_HISTORY_MAX = 30;
+
+function normalizeAdbTarget(line) {
+    if (!line) return "";
+    let t = line.trim();
+    if (!t) return "";
+    t = t.replace(/^adb\s+connect\s+/i, "").trim();
+    if (!t || t.startsWith("#")) return "";
+    return t;
+}
+function normalizeModelName(s) {
+    const m = (s || "").trim();
+    return m ? m : "Unknown";
+}
+function parseTargetsFromInput(text) {
+    return (text || "")
+        .split(/\r?\n/)
+        .map(normalizeAdbTarget)
+        .filter(Boolean);
+}
+function _normalizeHistoryItem(it) {
+    if (!it) return null;
+    if (typeof it === "string") {
+        const target = normalizeAdbTarget(it);
+        if (!target) return null;
+        return { model: "Unknown", last_target: target, total_ms: 0, last_ts: 0, active_since: 0 };
+    }
+    if (typeof it === "object") {
+        if (it.model && ("total_ms" in it || "active_since" in it || "last_target" in it)) {
+            const model = normalizeModelName(it.model);
+            const last_target = normalizeAdbTarget(it.last_target || it.target || it.ip || "");
+            const total_ms = Number(it.total_ms || 0) || 0;
+            const last_ts = Number(it.last_ts || it.ts || it.time || it.updated_at || 0) || 0;
+            const active_since = Number(it.active_since || 0) || 0;
+            return { model, last_target, total_ms, last_ts, active_since };
+        }
+        const target = normalizeAdbTarget(it.target || it.ip || "");
+        if (!target && !it.model) return null;
+        const model = normalizeModelName(it.model);
+        const ts = Number(it.ts || it.time || it.updated_at || 0) || 0;
+        return { model, last_target: target, total_ms: 0, last_ts: ts, active_since: 0 };
+    }
+    return null;
+}
+function loadAdbHistory() {
+    try {
+        const raw =
+            localStorage.getItem(ADB_HISTORY_KEY) ||
+            localStorage.getItem("adb_connect_history_v3") ||
+            localStorage.getItem("adb_connect_history_v2") ||
+            localStorage.getItem("adb_connect_history_v1");
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        return (arr || []).map(_normalizeHistoryItem).filter(Boolean);
+    } catch (e) {
+        return [];
+    }
+}
+function _mergeHistory(items) {
+    const map = new Map();
+    for (const raw of (items || [])) {
+        const it = _normalizeHistoryItem(raw);
+        if (!it) continue;
+        const key = normalizeModelName(it.model);
+        const prev = map.get(key);
+        if (!prev) {
+            map.set(key, it);
+            continue;
+        }
+        const prevLast = Number(prev.last_ts || 0);
+        const curLast = Number(it.last_ts || 0);
+        if (curLast >= prevLast) {
+            if (it.last_target) prev.last_target = it.last_target;
+            prev.last_ts = curLast;
+        }
+        prev.total_ms = Math.max(Number(prev.total_ms || 0), Number(it.total_ms || 0));
+        const pAct = Number(prev.active_since || 0);
+        const cAct = Number(it.active_since || 0);
+        if (pAct && cAct) prev.active_since = Math.min(pAct, cAct);
+        else prev.active_since = pAct || cAct || 0;
+        map.set(key, prev);
+    }
+    const uniq = Array.from(map.values())
+        .sort((a, b) => (Number(b.last_ts || 0) - Number(a.last_ts || 0)))
+        .slice(0, ADB_HISTORY_MAX);
+    return uniq;
+}
+function saveAdbHistory(items) {
+    const merged = _mergeHistory(items);
+    localStorage.setItem(ADB_HISTORY_KEY, JSON.stringify(merged));
+    renderAdbHistory();
+}
+function _getModelEntry(model) {
+    const items = loadAdbHistory();
+    const key = normalizeModelName(model);
+    const idx = items.findIndex(x => normalizeModelName(x.model) === key);
+    if (idx >= 0) return { items, idx, entry: items[idx] };
+    return { items, idx: -1, entry: null };
+}
+function _startSession(model, target) {
+    const now = Date.now();
+    const key = normalizeModelName(model);
+    const targetNorm = normalizeAdbTarget(target || "");
+    const { items, idx, entry } = _getModelEntry(key);
+    if (!entry) {
+        const e = { model: key, last_target: targetNorm, total_ms: 0, last_ts: now, active_since: now };
+        saveAdbHistory([e, ...items]);
+        return;
+    }
+    if (!entry.active_since) entry.active_since = now;
+    if (targetNorm) entry.last_target = targetNorm;
+    entry.last_ts = now;
+    items[idx] = entry;
+    saveAdbHistory(items);
+}
+function _stopSession(model) {
+    const now = Date.now();
+    const key = normalizeModelName(model);
+    const { items, idx, entry } = _getModelEntry(key);
+    if (!entry) return;
+    if (entry.active_since) {
+        const delta = Math.max(0, now - Number(entry.active_since || 0));
+        entry.total_ms = Number(entry.total_ms || 0) + delta;
+        entry.active_since = 0;
+    }
+    entry.last_ts = now;
+    items[idx] = entry;
+    saveAdbHistory(items);
+}
+function stopAllActiveSessions() {
+    const items = loadAdbHistory();
+    let changed = false;
+    const now = Date.now();
+    for (const it of items) {
+        if (it.active_since) {
+            const delta = Math.max(0, now - Number(it.active_since || 0));
+            it.total_ms = Number(it.total_ms || 0) + delta;
+            it.active_since = 0;
+            it.last_ts = now;
+            changed = true;
+        }
+    }
+    if (changed) saveAdbHistory(items);
+}
+function addTargetsToAdbHistory(targets) {
+    const now = Date.now();
+    const ts = (targets || []).map(normalizeAdbTarget).filter(Boolean);
+    if (ts.length === 0) return;
+    const existing = loadAdbHistory();
+    const newest = ts.reverse().map(t => ({
+        model: "Unknown", last_target: t, total_ms: 0, last_ts: now, active_since: 0
+    }));
+    saveAdbHistory([...newest, ...existing]);
+}
+function addResultsToAdbHistory(results) {
+    if (!results || results.length === 0) return;
+    results.forEach(r => {
+        const model = normalizeModelName(r.model);
+        const target = normalizeAdbTarget(r.ip || "");
+        _startSession(model, target);
+    });
+}
+function cssSafeId(s) { return (s || "").replace(/[^a-zA-Z0-9_-]/g, "_"); }
+function getSelectedHistoryTargets() {
+    const items = loadAdbHistory();
+    const selected = [];
+    for (const it of items) {
+        const cb = document.getElementById(`hist_${cssSafeId(it.model)}`);
+        if (cb && cb.checked && it.last_target) selected.push(it.last_target);
+    }
+    return selected;
+}
+function selectAllHistory(flag) {
+    const items = loadAdbHistory();
+    for (const it of items) {
+        const cb = document.getElementById(`hist_${cssSafeId(it.model)}`);
+        if (cb) cb.checked = !!flag;
+    }
+}
+function fillFromHistory() {
+    const selected = getSelectedHistoryTargets();
+    if (selected.length === 0) return;
+    document.getElementById("adbInput").value = selected.join("\n");
+}
+function addInputToHistory() {
+    const input = document.getElementById("adbInput").value;
+    const targets = parseTargetsFromInput(input);
+    if (targets.length === 0) {
+        alert("未识别到有效的 ADB 地址（例如：10.254.x.x:5555）");
+        return;
+    }
+    addTargetsToAdbHistory(targets);
+    alert(`✅ 已加入历史：${targets.length} 条`);
+}
+async function connectSelectedHistory() {
+    const selected = getSelectedHistoryTargets();
+    if (selected.length === 0) {
+        alert("请先在历史记录中勾选要连接的设备");
+        return;
+    }
+    document.getElementById("adbInput").value = selected.join("\n");
+    await connectDevices();
+}
+function _formatTs(ts) {
+    const t = Number(ts || 0);
+    if (!t) return "";
+    const d = new Date(t);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function _formatMs(ms) {
+    let diff = Math.max(0, Number(ms || 0));
+    const sec = Math.floor(diff / 1000);
+    const min = Math.floor(sec / 60);
+    const hr = Math.floor(min / 60);
+    const day = Math.floor(hr / 24);
+    if (day > 0) return `${day}天${hr % 24}小时`;
+    if (hr > 0) return `${hr}小时${min % 60}分`;
+    if (min > 0) return `${min}分${sec % 60}秒`;
+    return `${sec}秒`;
+}
+function _calcTotalMs(it) {
+    const base = Number(it.total_ms || 0);
+    const act = Number(it.active_since || 0);
+    if (!act) return base;
+    return base + Math.max(0, Date.now() - act);
+}
+function renderAdbHistory() {
+    const box = document.getElementById("adbHistory");
+    if (!box) return;
+    const items = loadAdbHistory();
+    if (items.length === 0) {
+        box.innerHTML = '<div class="text-xs text-gray-400">暂无历史记录</div>';
+        return;
+    }
+    box.innerHTML = items.map((it, idx) => {
+        const id = cssSafeId(it.model);
+        const label = (it.model && it.model.trim()) ? it.model.trim() : `未命名设备 #${idx + 1}`;
+        const totalText = _formatMs(_calcTotalMs(it));
+        const lastText = _formatTs(it.last_ts);
+        const activeBadge = it.active_since ? `<span class="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">在线计时中</span>` : "";
+        return `
+            <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer border border-gray-200 bg-white">
+                <input id="hist_${id}" type="checkbox" class="w-4 h-4" />
+                <div class="min-w-0">
+                    <div class="text-xs font-semibold text-gray-800 truncate">${label}${activeBadge}</div>
+                    <div class="text-[11px] text-gray-500 truncate">⏱ 累计：${totalText}${lastText ? `  ·  🕒 ${lastText}` : ""}</div>
+                </div>
+            </label>
+        `;
+    }).join("");
+}
+setInterval(() => {
+    const items = loadAdbHistory();
+    if (items.some(it => it.active_since)) renderAdbHistory();
+}, 1000);
+
+// =================== ✅ Task State UI（结构化状态驱动） ===================
+let LAST_TASK_STATE = null;
+
+function _modeLabel(mode) {
+    if (!mode) return "";
+    if (mode === "capture") return "截图任务";
+    if (mode === "init") return "新包登录";
+    if (mode === "install") return "批量装包";
+    return mode;
+}
+
+function applyTaskState(payload) {
+    if (!payload) return;
+
+    const state = (payload.state || "").toUpperCase();
+    const mode = payload.mode || null;
+    const message = payload.message || "";
+    const ts = payload.ts || "";
+
+    LAST_TASK_STATE = { state, mode, message, ts };
+
+    const badge = document.getElementById('globalStatus');
+
+    // ✅ 不在界面上铺说明；仅提供 hover 信息（需要时再看）
+    const parts = [];
+    if (mode) parts.push(`模式：${_modeLabel(mode)}`);
+    if (message) parts.push(`说明：${message}`);
+    if (ts) parts.push(`时间：${ts}`);
+    badge.title = parts.join(" · ");
+
+    const runningStates = new Set(["INITING", "RUNNING", "STOPPING"]);
+    const isRunning = runningStates.has(state);
+
+    if (state === "RUNNING") {
+        badge.className = "text-xs font-bold bg-green-600 text-white px-3 py-1 rounded-full animate-pulse shadow-lg";
+        badge.innerText = "🚀 运行中 (Running)";
+    } else if (state === "INITING") {
+        badge.className = "text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-full animate-pulse shadow-lg";
+        badge.innerText = "🧩 初始化 (Initing)";
+    } else if (state === "STOPPING") {
+        badge.className = "text-xs font-bold bg-yellow-600 text-white px-3 py-1 rounded-full animate-pulse shadow-lg";
+        badge.innerText = "🛑 停止中 (Stopping)";
+    } else if (state === "ERROR") {
+        badge.className = "text-xs font-bold bg-red-600 text-white px-3 py-1 rounded-full shadow-lg";
+        badge.innerText = "❌ 异常 (Error)";
+    } else if (state === "FINISHED") {
+        badge.className = "text-xs font-bold bg-indigo-600 text-white px-3 py-1 rounded-full shadow-lg";
+        badge.innerText = "🏁 完成 (Finished)";
+    } else {
+        badge.className = "text-xs font-bold bg-gray-600 text-gray-200 px-3 py-1 rounded-full";
+        badge.innerText = "💤 休息中 (Idle)";
+    }
+
+    if (isRunning) setUIRunning(false);
+    else setUIStopped(false);
+
+    if (isRunning) toggleAdminPanel(true);
+}
+
+function setUIRunning(updateBadge = true) {
+    document.getElementById('btnRun').classList.add('hidden');
+    document.getElementById('btnLogin').classList.add('hidden');
+    document.getElementById('btnInstall').classList.add('hidden');
+    document.getElementById('btnStop').classList.remove('hidden');
+
+    if (updateBadge) {
+        const badge = document.getElementById('globalStatus');
+        badge.className = "text-xs font-bold bg-green-600 text-white px-3 py-1 rounded-full animate-pulse shadow-lg";
+        badge.innerText = "🚀 运行中 (Running)";
+    }
+    toggleAdminPanel(true);
+}
+
+function setUIStopped(updateBadge = true) {
+    document.getElementById('btnRun').classList.remove('hidden');
+    document.getElementById('btnLogin').classList.remove('hidden');
+    document.getElementById('btnInstall').classList.remove('hidden');
+    document.getElementById('btnStop').classList.add('hidden');
+
+    if (updateBadge) {
+        const badge = document.getElementById('globalStatus');
+        badge.className = "text-xs font-bold bg-gray-600 text-gray-200 px-3 py-1 rounded-full";
+        badge.innerText = "💤 休息中 (Idle)";
+    }
+}
+
+function saveUIState() {
+    localStorage.setItem("apk_path", currentApkPath);
+    localStorage.setItem("admin_open", !document.getElementById('adminContent').classList.contains('hidden'));
+}
+function loadUIState() {
+    const savedPath = localStorage.getItem("apk_path");
+    if (savedPath) currentApkPath = savedPath;
+    const adminOpen = localStorage.getItem("admin_open") === 'true';
+    if (adminOpen) toggleAdminPanel(true);
+}
+
+// =================== ✅ Socket.IO Logic ===================
+const socket = window.socket || io({ transports: ["websocket", "polling"] });
+
+socket.on('connect', () => {
+    console.log('🔗 WebSocket Connected');
+    document.getElementById('socketStatus').innerText = '已连接';
+    document.getElementById('socketStatus').className = 'text-xs bg-green-800 text-green-200 px-2 py-0.5 rounded';
+
+    try {
+        fetch('/api/task_state')
+            .then(r => r.json())
+            .then(d => { if (d && d.task_state) applyTaskState(d.task_state); })
+            .catch(() => {});
+    } catch (e) {}
+});
+
+socket.on('disconnect', () => {
+    console.log('🔌 WebSocket Disconnected');
+    document.getElementById('socketStatus').innerText = '断开';
+    document.getElementById('socketStatus').className = 'text-xs bg-red-800 text-red-200 px-2 py-0.5 rounded';
+});
+
+socket.on('task_state', (data) => {
+    applyTaskState(data);
+});
+
+let _cloudExpectedTotal = 0;
+socket.on("cloud_progress", (data) => {
+    const step = (data && (data.step ?? data.current)) || 0;
+    const total = (data && data.total) || _cloudExpectedTotal || 0;
+    const name = (data && data.name) || "";
+
+    const box = document.getElementById("cloudProgressBox");
+    const bar = document.getElementById("cloudProgressBar");
+    const text = document.getElementById("cloudProgressText");
+
+    box.classList.remove("hidden");
+
+    let percent = 0;
+    if (total > 0) percent = Math.max(0, Math.min(100, Math.round((step / total) * 100)));
+    else percent = Math.max(0, Math.min(95, step * 15));
+
+    bar.style.width = percent + "%";
+    text.innerText = total > 0
+        ? `📱 正在占用第 ${step} / ${total} 台：${name}`
+        : `📱 正在占用第 ${step} 台：${name}`;
+});
+
+socket.on('new_log', (msg) => {
+    const logWin = document.getElementById('logWindow');
+    const line = msg.data;
+
+    let cls = "text-gray-300";
+    if(line.includes("❌")) cls = "text-red-400 font-bold";
+    else if(line.includes("✅")) cls = "text-green-400";
+    else if(line.includes("📸")) cls = "text-indigo-300";
+    else if(line.includes("🔌") || line.includes("🚀")) cls = "text-blue-300";
+    else if(line.includes("⌨️")) cls = "text-yellow-300";
+
+    const p = document.createElement('p');
+    p.className = `${cls} font-mono border-b border-gray-800 pb-0.5 mb-0.5 break-all`;
+    p.innerText = line;
+
+    logWin.appendChild(p);
+    logWin.scrollTop = logWin.scrollHeight;
+});
+
+socket.on('task_status', (data) => {
+    if (!data.running) {
+        if (!LAST_TASK_STATE || (LAST_TASK_STATE.state === "RUNNING" || LAST_TASK_STATE.state === "INITING" || LAST_TASK_STATE.state === "STOPPING")) {
+            setUIStopped(true);
+        }
+        const logWin = document.getElementById('logWindow');
+        const p = document.createElement('p');
+        p.className = "text-yellow-400 font-bold border-b border-gray-800 pb-0.5 mb-0.5 mt-2";
+        p.innerText = "🏁 任务已结束 (如需查看新报告，请手动点击 '刷新列表' 按钮)";
+        logWin.appendChild(p);
+        logWin.scrollTop = logWin.scrollHeight;
+    }
+});
+
+// =================== 1. Run Control Logic ===================
+async function runTest() {
+    refreshTaskList(true);
+
+    if (!window.currentExecutionList || window.currentExecutionList.length === 0) {
+        alert("⚠️ 任务列表为空！请添加任务。");
+        return;
+    }
+    if (connectedDevicesList.length === 0) {
+        alert("⚠️ 请先连接设备。");
+        toggleAdminPanel(true);
+        return;
+    }
+
+    const targetIPs = connectedDevicesList.map(d => d.ip);
+    if(!confirm(`确认开始执行？\n\n🎯 目标设备：${targetIPs.length} 台\n📸 截图任务：${window.currentExecutionList.length} 个`)) return;
+
+    setUIRunning();
+    document.getElementById('logWindow').innerHTML = '<p class="text-gray-500">>>> 任务初始化中...</p>';
+
+    try {
+        await fetch('/api/run_test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tasks: window.currentExecutionList,
+                target_devices: targetIPs
+            })
+        });
+    } catch (e) {
+        console.error(e);
+        alert("无法连接服务器");
+        setUIStopped();
+    }
+}
+
+async function runLoginOnly() {
+    if (connectedDevicesList.length === 0) {
+        alert("⚠️ 请先连接设备。");
+        toggleAdminPanel(true);
+        return;
+    }
+
+    const targetIPs = connectedDevicesList.map(d => d.ip);
+
+    if(!confirm(`确认对 ${targetIPs.length} 台设备执行【新包自动登录】？\n\n这将执行：启动 -> 新包确认(固定账号) -> 选服 -> 登录，\n但不会执行截图任务。`)) return;
+
+    setUIRunning();
+    const logWin = document.getElementById('logWindow');
+    logWin.innerHTML = '<p class="text-blue-400 font-bold">>>> 正在发送新包登录指令...</p>';
+
+    try {
+        await fetch('/api/run_login_only', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                target_devices: targetIPs
+            })
+        });
+    } catch (e) {
+        console.error(e);
+        alert("无法连接服务器");
+        setUIStopped();
+    }
+}
+
+async function uploadApk() {
+    const fileInput = document.getElementById('apkFileInput');
+    const statusEl = document.getElementById('apkUploadStatus');
+    const btn = document.getElementById('btnUploadApk');
+
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        alert("请先选择一个 APK 文件");
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+
+    btn.disabled = true;
+    statusEl.innerText = "⏳ 正在上传 APK...";
+    statusEl.className = "mt-2 text-xs text-gray-500";
+
+    try {
+        const res = await fetch('/upload_apk', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            currentApkPath = data.apk_path;
+            statusEl.innerText = `✅ 上传成功：${file.name}`;
+            statusEl.className = "mt-2 text-xs text-green-600";
+        } else {
+            currentApkPath = "";
+            statusEl.innerText = `❌ 上传失败：${data.msg || '未知错误'}`;
+            statusEl.className = "mt-2 text-xs text-red-500";
+        }
+    } catch (e) {
+        console.error(e);
+        currentApkPath = "";
+        statusEl.innerText = "❌ 上传失败：网络或服务器错误";
+        statusEl.className = "mt-2 text-xs text-red-500";
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function runInstall() {
+    if (!currentApkPath) {
+        alert("请先上传 APK 文件");
+        return;
+    }
+
+    if (!connectedDevicesList || connectedDevicesList.length === 0) {
+        alert("⚠️ 请先连接至少一台设备");
+        toggleAdminPanel(true);
+        return;
+    }
+
+    const targetIPs = connectedDevicesList.map(d => d.ip);
+    const fileInput = document.getElementById('apkFileInput');
+    const fileName = fileInput && fileInput.files && fileInput.files[0]
+        ? fileInput.files[0].name
+        : '已上传的 APK';
+
+    if (!confirm(
+        `确认对 ${targetIPs.length} 台设备执行【批量装包】？\n\n` +
+        `APK：${fileName}\n` +
+        `设备：\n - ` + targetIPs.join('\n - ')
+    )) {
+        return;
+    }
+
+    setUIRunning();
+    const logWin = document.getElementById('logWindow');
+    logWin.innerHTML = '<p class="text-blue-400 font-bold">>>> 正在启动批量装包任务...</p>';
+
+    socket.emit('start_task', {
+        mode: 'install',
+        custom_tasks: [],
+        selected_devices: targetIPs,
+        apk_path: currentApkPath
+    });
+}
+
+async function stopTest() {
+    if(!confirm("确定强制停止？")) return;
+    await fetch('/api/stop_test', { method: 'POST' });
+}
+
+// =================== 2. Device Connection Logic ===================
+async function connectDevices() {
+    const input = document.getElementById('adbInput').value;
+    if (!input.trim()) { alert("请输入内容"); return; }
+
+    addTargetsToAdbHistory(parseTargetsFromInput(input));
+
+    const btn = document.getElementById('btnConnect');
+    const loading = document.getElementById('connLoading');
+    btn.disabled = true; loading.classList.remove('hidden');
+
+    try {
+        const res = await fetch('/api/connect_devices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targets: input })
+        });
+        const data = await res.json();
+        if (data.success) {
+            addResultsToAdbHistory(data.results);
+            for (const item of data.results) {
+                updateDeviceList(item);
+                if (item.need_config) showConfigModal(item.model);
+            }
+        }
+    } catch (e) { alert("请求失败"); }
+    finally {
+        btn.disabled = false; loading.classList.add('hidden');
+        renderDeviceList();
+    }
+}
+
+async function autoCloudConnect() {
+    const btn = document.getElementById('btnConnect');
+    const loading = document.getElementById('connLoading');
+
+    try {
+        btn.disabled = true;
+        loading.classList.remove("hidden");
+
+        _cloudExpectedTotal = 5;
+        document.getElementById("cloudProgressBox").classList.remove("hidden");
+        document.getElementById("cloudProgressBar").style.width = "0%";
+        document.getElementById("cloudProgressText").innerText = "🚀 开始自动占用云真机…";
+
+        const res = await fetch('/api/cloud/auto_connect_fav', { method: 'POST' });
+        const data = await res.json();
+
+        if (!data.success) {
+            alert("自动占用失败：" + (data.msg || "未知错误"));
+            return;
+        }
+
+        if (Array.isArray(data.results)) {
+            addResultsToAdbHistory(data.results);
+            data.results.forEach(updateDeviceList);
+            renderDeviceList();
+
+            const adbs = data.results.map(d => d.ip).join("\n");
+            document.getElementById("adbInput").value = adbs;
+        }
+
+        const got = typeof data.count === 'number' ? data.count : (Array.isArray(data.results) ? data.results.length : 0);
+        document.getElementById("cloudProgressText").innerText = got > 0
+            ? `✅ 自动占用完成（成功占用 ${got} 台）`
+            : "✅ 自动占用完成";
+
+        document.getElementById("cloudProgressBar").style.width = got > 0 ? "100%" : "0%";
+
+    } catch (err) {
+        console.error(err);
+        alert("自动占用异常：无法连接服务器");
+    } finally {
+        btn.disabled = false;
+        loading.classList.add("hidden");
+    }
+}
+
+async function releaseCloudDevices() {
+    if (!confirm("确认释放【本轮自动占用】的所有云真机？")) return;
+
+    try {
+        const btn = document.getElementById('btnReleaseCloud');
+        if (btn) btn.disabled = true;
+        const res = await fetch("/api/cloud/release", { method: "POST" });
+        const data = await res.json();
+
+        if (data.success) {
+            alert("✅ 云真机已释放");
+            try { stopAllActiveSessions(); } catch (e) {}
+            document.getElementById("cloudProgressText").innerText = "♻️ 已释放云真机";
+            document.getElementById("cloudProgressBar").style.width = "0%";
+
+            connectedDevicesList = [];
+            saveDevices();
+            renderDeviceList();
+            const adbInput = document.getElementById("adbInput");
+            if (adbInput) adbInput.value = "";
+            _cloudExpectedTotal = 0;
+        } else {
+            alert("释放失败：" + (data.msg || "未知错误"));
+        }
+    } catch (e) {
+        alert("释放失败：无法连接服务器");
+    } finally {
+        const btn = document.getElementById('btnReleaseCloud');
+        if (btn) btn.disabled = false;
+    }
+}
+
+function updateDeviceList(newItem) {
+    connectedDevicesList = connectedDevicesList.filter(d => d.ip !== newItem.ip);
+    connectedDevicesList.push(newItem);
+    saveDevices();
+}
+
+function renderDeviceList() {
+    const list = document.getElementById('deviceListDisplay');
+    list.innerHTML = '';
+    if (connectedDevicesList.length === 0) {
+        list.innerHTML = '<li class="text-gray-400 text-center py-4">暂无设备</li>';
+        return;
+    }
+
+    connectedDevicesList.forEach(dev => {
+        const li = document.createElement('li');
+        li.className = "flex justify-between items-center bg-gray-50 border border-gray-200 p-3 rounded shadow-sm transition hover:shadow-md";
+
+        let statusHtml = '';
+        if (dev.need_config) {
+            statusHtml = `<button onclick="showConfigModal('${dev.model}')" class="bg-red-500 text-white text-xs px-2 py-1 rounded animate-pulse shadow hover:bg-red-600 transition">🔴 点击配置画质</button>`;
+        } else {
+            const isOk = (dev.status === 'success' || dev.status === 'online');
+            const color = isOk ? 'text-green-600' : (dev.status === 'warning' ? 'text-yellow-600' : 'text-red-500');
+            const icon = isOk ? '✅' : (dev.status === 'warning' ? '⚠️' : '❌');
+            const msg = dev.msg || (isOk ? '就绪' : '异常');
+            statusHtml = `<span class="${color} font-bold text-xs">${icon} ${msg}</span>`;
+        }
+
+        const modelText = dev.model || 'Unknown';
+        const ipText = dev.ip || '';
+
+        li.innerHTML = `
+            <div class="flex flex-col min-w-0">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200 font-bold shrink-0">📱 ${modelText}</span>
+                </div>
+                <div class="mt-1">${statusHtml}</div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <button onclick="copyText('${ipText}')" class="px-2 py-1 text-xs rounded bg-white border border-gray-200 hover:bg-gray-50 text-gray-600" title="复制 ADB 地址">复制</button>
+                <button onclick="disconnectDevice('${ipText}')" class="w-10 h-10 flex items-center justify-center text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition" title="断开连接">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+        `;
+        list.appendChild(li);
+    });
+}
+
+async function disconnectDevice(ip) {
+    if(!confirm(`确定断开 ${ip}?`)) return;
+
+    const dev = (connectedDevicesList || []).find(d => d && d.ip === ip) || null;
+
+    connectedDevicesList = connectedDevicesList.filter(d => d.ip !== ip);
+    saveDevices();
+    renderDeviceList();
+
+    try {
+        if (dev && dev.model) _stopSession(dev.model);
+    } catch (e) {}
+
+    await fetch('/api/disconnect_device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: ip })
+    });
+}
+
+async function clearDeviceList() {
+    try { stopAllActiveSessions(); } catch (e) {}
+    if(!confirm("⚠️ 警告：这将断开所有 ADB 连接并清空列表！\n\n确定继续吗？")) return;
+
+    connectedDevicesList = [];
+    saveDevices();
+    renderDeviceList();
+
+    try {
+        await fetch('/api/disconnect_all', { method: 'POST' });
+        const logWin = document.getElementById('logWindow');
+        const p = document.createElement('p');
+        p.className = "text-yellow-500 font-mono text-xs";
+        p.innerText = "🔌 已发送指令断开所有设备连接...";
+        logWin.appendChild(p);
+    } catch (e) {
+        console.error("断开失败", e);
+    }
+}
+
+function saveDevices() { localStorage.setItem(DEVICE_KEY, JSON.stringify(connectedDevicesList)); }
+function loadDevices() {
+    try {
+        const raw = localStorage.getItem(DEVICE_KEY);
+        if (raw) connectedDevicesList = JSON.parse(raw);
+        renderDeviceList();
+    } catch(e) { connectedDevicesList = []; }
+}
+
+function showConfigModal(modelName) {
+    pendingModelName = modelName;
+    document.getElementById('modalModelName').innerText = modelName;
+    document.getElementById('configModal').classList.remove('hidden');
+}
+async function confirmQuality(quality) {
+    if (!pendingModelName) return;
+    await fetch('/api/update_device_cap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: pendingModelName, quality: quality })
+    });
+    const index = connectedDevicesList.findIndex(d => d.model === pendingModelName);
+    if (index !== -1) {
+        connectedDevicesList[index].need_config = false;
+        connectedDevicesList[index].msg = `✅ 就绪 (${quality})`;
+        saveDevices(); renderDeviceList();
+    }
+    closeModal();
+}
+function closeModal() { document.getElementById('configModal').classList.add('hidden'); pendingModelName = ""; }
+
+// =================== Compare Template (Baseline) ===================
+async function setAsTemplate(rid){
+    if(!rid) return;
+    if(!confirm('将该报告设置为【对比模板】？\n\n后续在“差异对比”页会默认使用此模板作为左侧基准。')){
+        return;
+    }
+    try{
+        const r = await fetch('/api/template/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rid })
+        });
+        const j = await r.json();
+        if(j.success){
+            window.location.reload();
+        }else{
+            alert('设置失败：' + (j.msg || 'unknown'));
+        }
+    }catch(e){
+        console.error(e);
+        alert('请求异常');
+    }
+}
+
+// =================== Delete Modal Logic ===================
+function prepareDeleteReport(rid) {
+    pendingDeleteRid = rid;
+    document.getElementById('chkDeleteLocalFile').checked = false;
+    document.getElementById('deleteConfirmModal').classList.remove('hidden');
+}
+function closeDeleteModal() {
+    pendingDeleteRid = null;
+    document.getElementById('deleteConfirmModal').classList.add('hidden');
+}
+async function confirmDeleteAction() {
+    if (!pendingDeleteRid) return;
+    const deleteLocal = document.getElementById('chkDeleteLocalFile').checked;
+    try {
+        const res = await fetch('/delete_report/' + pendingDeleteRid, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ delete_local: deleteLocal })
+        });
+        const data = await res.json();
+        if (data.success) window.location.reload();
+        else alert('删除失败');
+    } catch (e) {
+        console.error(e);
+        alert('请求异常');
+    } finally {
+        closeDeleteModal();
+    }
+}
+
+// =================== 3. Task Planning Logic ===================
+function initPresets() {
+    const container = document.getElementById('presetList');
+    container.innerHTML = '';
+    const savedConfig = loadConfig();
+    const checkedNames = savedConfig ? savedConfig.checkedPresets : PRESETS.map(p => p.name);
+
+    if (savedConfig && savedConfig.customTasks) {
+        customTasks = savedConfig.customTasks;
+        if (customTasks.length > 0) manualCounter = customTasks.length + 1;
+    }
+
+    PRESETS.forEach(p => {
+        const div = document.createElement('div');
+        div.className = "flex items-center space-x-2";
+        const isChecked = checkedNames.includes(p.name) ? 'checked' : '';
+        div.innerHTML = `
+            <input type="checkbox" id="chk_${p.name}" value="${p.name}" class="w-4 h-4 text-indigo-600 rounded cursor-pointer focus:ring-indigo-500" ${isChecked} onchange="refreshTaskList()">
+            <label for="chk_${p.name}" class="text-sm text-gray-700 cursor-pointer select-none">${p.name}</label>
+        `;
+        container.appendChild(div);
+    });
+    refreshTaskList(false);
+}
+function refreshTaskList(shouldSave = true) {
+    const tbody = document.getElementById('finalTaskList');
+    tbody.innerHTML = '';
+    let finalTasks = [];
+
+    PRESETS.forEach(p => {
+        const chk = document.getElementById(`chk_${p.name}`);
+        if (chk && chk.checked) finalTasks.push({ ...p, isCustom: false });
+    });
+
+    finalTasks = finalTasks.concat(customTasks);
+    window.currentExecutionList = finalTasks;
+    document.getElementById('taskCount').textContent = `共 ${finalTasks.length} 个任务`;
+
+    finalTasks.forEach((t) => {
+        const row = document.createElement('tr');
+        row.className = "bg-white border-b hover:bg-gray-50";
+        const delBtn = t.isCustom
+            ? `<button onclick="removeCustomTask('${t.name}')" class="text-red-500 hover:text-red-700 font-bold text-lg w-8 h-8 flex items-center justify-center hover:bg-red-50 rounded" title="删除">&times;</button>`
+            : '<span class="text-gray-300">-</span>';
+        row.innerHTML = `
+            <td class="px-3 py-2 font-medium text-gray-900">
+                ${t.name} ${t.isCustom ? '<span class="text-xs text-indigo-500 border border-indigo-200 px-1 rounded ml-1">自</span>' : ''}
+            </td>
+            <td class="px-3 py-2 text-gray-500 font-mono">${t.name==='渡口'?'-':t.x}</td>
+            <td class="px-3 py-2 text-gray-500 font-mono">${t.name==='渡口'?'-':t.y}</td>
+            <td class="px-3 py-2 text-right flex justify-end">${delBtn}</td>
+        `;
+        tbody.appendChild(row);
+    });
+
+    if (shouldSave) saveConfig();
+}
+function saveConfig() {
+    const checkedPresets = [];
+    PRESETS.forEach(p => {
+        const chk = document.getElementById(`chk_${p.name}`);
+        if (chk && chk.checked) checkedPresets.push(p.name);
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ checkedPresets, customTasks }));
+}
+function loadConfig() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+}
+function addBatchCoords() {
+    const input = document.getElementById('batchInput').value.trim();
+    let name = document.getElementById('batchNameInput').value.trim();
+    const match = input.match(/(\d+)[\s,，]+(\d+)/);
+
+    if (!match) { alert("坐标格式错误"); return; }
+    const x = parseInt(match[1]);
+    const y = parseInt(match[2]);
+    if (!name) name = `手动添加${manualCounter++}`;
+    customTasks.push({ name, x, y, isCustom: true });
+
+    document.getElementById('batchInput').value = '';
+    document.getElementById('batchNameInput').value = '';
+    refreshTaskList(true);
+}
+function removeCustomTask(name) {
+    customTasks = customTasks.filter(t => t.name !== name);
+    refreshTaskList(true);
+}
+
+async function startScan() {
+    const btn = document.getElementById('scanBtn');
+    const loading = document.getElementById('scanLoading');
+    btn.disabled = true; loading.classList.remove('hidden');
+    try {
+        const res = await fetch('/scan', { method: 'POST' });
+        const data = await res.json();
+        if(data.success) setTimeout(() => window.location.reload(), 500);
+    } catch(e) {}
+    finally {
+        btn.disabled = false;
+        loading.classList.add('hidden');
+    }
+}
+
+// =================== 初始化 ===================
+document.addEventListener("DOMContentLoaded", function() {
+    initPresets();
+    loadDevices();
+    loadUIState();
+    renderAdbHistory();
+
+    fetch('/api/logs')
+        .then(r => r.json())
+        .then(d => {
+            if (d && d.task_state) {
+                applyTaskState(d.task_state);
+            } else if (d && d.running) {
+                setUIRunning(true);
+            } else {
+                setUIStopped(true);
+            }
+        })
+        .catch(() => {});
+});
+
+document.addEventListener("DOMContentLoaded", async () => {
+    await fetch('/get_devices')
+        .then(r => r.json())
+        .then(res => {
+            if (res.status === 'success') {
+                res.data.forEach(updateDeviceList);
+                renderDeviceList();
+            }
+        });
+});
+</script>
+{% endblock %}

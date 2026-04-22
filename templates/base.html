@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}画质测试{% endblock %}</title>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Socket.IO（必须，全局只引一次） -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+
+    {% block head %}{% endblock %}
+</head>
+<body class="min-h-screen flex flex-col">
+    <nav class="bg-gray-800 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="text-xl font-bold flex items-center gap-2">
+                        🎮 画质对比工作台
+                    </a>
+                </div>
+                <div class="flex items-center gap-6">
+                    <a href="/" class="hover:text-blue-400">📜 历史记录</a>
+                    <a href="/compare_page" class="hover:text-blue-400">⚖️ 差异对比</a>
+                    <span class="text-xs bg-gray-700 px-2 py-1 rounded">V2.0 Lite</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow max-w-7xl mx-auto w-full px-4 py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-gray-800 text-gray-400 py-4 text-center text-sm">
+        <p>&copy; 画质测试</p>
+    </footer>
+
+    <!-- ===== Socket.IO 全局初始化（只在 base.html） ===== -->
+    <script>
+        // 全局 socket 实例，所有子页面直接使用
+        window.socket = io({ transports: ["websocket", "polling"] });
+
+        window.socket.on("connect", () => {
+            console.log("🔌 Socket.IO 已连接:", window.socket.id);
+        });
+
+        window.socket.on("disconnect", () => {
+            console.warn("⚠️ Socket.IO 断开连接");
+        });
+    </script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

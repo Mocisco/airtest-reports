@@ -1,0 +1,14 @@
+{
+    "device_quality_rules": {
+        "流畅": ["REDMI_K40"],
+        "均衡": ["nova_13", "HUAWEI_P50_Pro", "vivo_Y100t", "Mate_40"],
+        "精致": [],
+        "极致": ["Mate_60_Pro", "REDMI_K80", "vivo_X100", "vivoX200", "vivox100spro"]
+    },
+    "model_alias": {
+        "BRA-AL00": "mumumasterdx",
+        "HBP-AL00": "mumumastervulkan",
+        "HBN-AL00": "mumupredx",
+        "BVL-AN16": "mumuprevulkan"
+    }
+}

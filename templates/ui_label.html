@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}UI 标注台{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto p-6 space-y-4">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">🧠 UI 标注台</h1>
+      <p class="text-sm text-gray-500 mt-1">
+        目标：把 <code class="px-1 py-0.5 bg-gray-100 rounded">scripts/</code> 里的模板图片（含你已有的 <code>image_templates.json</code>）统一拉出来，
+        你在 Web 上给图片命名（如“邮件/国家/外交/联盟/返回主城”），并且能一键“入库”到执行层。
+      </p>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button id="btnReload" class="px-4 py-2 rounded bg-gray-800 text-white hover:bg-black text-sm font-semibold">刷新</button>
+      <a href="/" class="px-4 py-2 rounded border border-gray-300 bg-white hover:bg-gray-50 text-sm font-semibold">返回主页</a>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-lg shadow border border-gray-200 p-4 space-y-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <input id="q" class="flex-1 min-w-[220px] border rounded px-3 py-2 text-sm" placeholder="搜索：文件名 / 模板key / 标注名" />
+      <label class="text-sm flex items-center gap-2">
+        <input id="onlyUnlabeled" type="checkbox" class="w-4 h-4" />
+        只看未标注
+      </label>
+      <label class="text-sm flex items-center gap-2">
+        <input id="onlyLabeled" type="checkbox" class="w-4 h-4" />
+        只看已标注
+      </label>
+      <span id="stat" class="text-sm text-gray-500"></span>
+    </div>
+
+    <div class="flex flex-wrap items-end gap-3 pt-2 border-t">
+      <div class="flex flex-col">
+        <label class="text-xs text-gray-500">设备序列号 / IP:PORT</label>
+        <input id="serial" class="border rounded px-3 py-2 text-sm w-[280px]" placeholder="例如 192.168.1.10:5555" />
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btnExtract" class="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-semibold">从当前界面提取 UI 候选</button>
+        <div id="extractHint" class="text-xs text-gray-500">会截图并在 scripts/ui_candidates/ 生成候选图标，随后出现在列表里等待你命名。</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let ALL = [];
+
+function esc(s){
+  return String(s||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+
+function tplUrl(fn){
+  return `/tpl/${encodeURIComponent(fn)}`;
+}
+
+async function loadList(){
+  const r = await fetch('/api/ui/list');
+  const j = await r.json();
+  if(!j.success){
+    alert(j.msg || '加载失败');
+    return;
+  }
+  ALL = j.items || [];
+  render();
+}
+
+function applyFilters(){
+  const q = (document.getElementById('q').value || '').trim().toLowerCase();
+  const onlyUn = document.getElementById('onlyUnlabeled').checked;
+  const onlyLb = document.getElementById('onlyLabeled').checked;
+  let items = ALL;
+  if(onlyUn && !onlyLb) items = items.filter(x => !x.label);
+  if(onlyLb && !onlyUn) items = items.filter(x => !!x.label);
+  if(q){
+    items = items.filter(x => {
+      const keys = (x.template_keys || []).join(' ').toLowerCase();
+      return (x.filename||'').toLowerCase().includes(q)
+        || keys.includes(q)
+        || (x.label||'').toLowerCase().includes(q);
+    });
+  }
+  return items;
+}
+
+function cardHtml(item){
+  const keys = item.template_keys || [];
+  const keyBadge = keys.length ? `<div class="text-xs text-gray-500 mt-1 break-words">模板key：<span class="font-mono">${esc(keys.join(', '))}</span></div>`
+                              : `<div class="text-xs text-gray-400 mt-1">未登记到 image_templates.json（可在保存时勾选“入库”）</div>`;
+
+  return `
+  <div class="bg-white border rounded-lg shadow-sm overflow-hidden">
+    <div class="aspect-square bg-gray-50 flex items-center justify-center">
+      <img src="${tplUrl(item.filename)}" alt="${esc(item.filename)}" class="max-h-full max-w-full" onerror="this.style.display='none'" />
+    </div>
+    <div class="p-3 space-y-2">
+      <div class="text-xs text-gray-500 break-words">${esc(item.filename)}</div>
+      ${keyBadge}
+
+      <div class="space-y-1">
+        <label class="text-xs text-gray-500">标注名（语义）</label>
+        <input data-fn="${esc(item.filename)}" class="lbl border rounded px-2 py-1 text-sm w-full" value="${esc(item.label||'')}" placeholder="例如：邮件 / 国家 / 外交 / 联盟 / 返回" />
+      </div>
+
+      <div class="flex items-center justify-between gap-2">
+        <label class="text-xs flex items-center gap-2">
+          <input data-fn="${esc(item.filename)}" class="reg w-4 h-4" type="checkbox" />
+          保存并入库（可执行）
+        </label>
+        <button data-fn="${esc(item.filename)}" class="btnSave px-3 py-1.5 rounded bg-gray-800 text-white hover:bg-black text-xs font-semibold">保存</button>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <input data-fn="${esc(item.filename)}" class="testLabel border rounded px-2 py-1 text-xs flex-1" placeholder="测试点击：默认用上面的标注名" />
+        <button data-fn="${esc(item.filename)}" class="btnTest px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-semibold">点一下</button>
+      </div>
+
+      <div data-fn="${esc(item.filename)}" class="msg text-xs text-gray-500"></div>
+    </div>
+  </div>`;
+}
+
+function render(){
+  const items = applyFilters();
+  document.getElementById('stat').innerText = `共 ${ALL.length} 张，当前显示 ${items.length} 张`;
+  document.getElementById('grid').innerHTML = items.map(cardHtml).join('');
+
+  // wire save
+  document.querySelectorAll('.btnSave').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const fn = e.currentTarget.getAttribute('data-fn');
+      const labelInput = document.querySelector(`.lbl[data-fn="${CSS.escape(fn)}"]`);
+      const regInput = document.querySelector(`.reg[data-fn="${CSS.escape(fn)}"]`);
+      const msg = document.querySelector(`.msg[data-fn="${CSS.escape(fn)}"]`);
+      const label = (labelInput?.value || '').trim();
+      const register = !!regInput?.checked;
+      msg.innerText = '保存中...';
+      const r = await fetch('/api/ui/save_label', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({filename: fn, label, tags: [], notes: '', register})
+      });
+      const j = await r.json();
+      if(j.success){
+        msg.innerText = register ? '✅ 已保存并入库（可执行）' : '✅ 已保存';
+        await loadList();
+      }else{
+        msg.innerText = '❌ 保存失败：' + (j.msg || 'unknown');
+      }
+    });
+  });
+
+  // wire test click
+  document.querySelectorAll('.btnTest').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const fn = e.currentTarget.getAttribute('data-fn');
+      const msg = document.querySelector(`.msg[data-fn="${CSS.escape(fn)}"]`);
+      const labelInput = document.querySelector(`.lbl[data-fn="${CSS.escape(fn)}"]`);
+      const testInput = document.querySelector(`.testLabel[data-fn="${CSS.escape(fn)}"]`);
+      const serial = (document.getElementById('serial').value || '').trim();
+      const label = ((testInput?.value || '').trim() || (labelInput?.value || '').trim());
+      if(!serial){ msg.innerText = '⚠️ 请输入设备序列号/IP:PORT'; return; }
+      if(!label){ msg.innerText = '⚠️ 请输入要点击的语义（标注名）'; return; }
+      msg.innerText = `点击中：${label} ...`;
+      const r = await fetch('/api/ui/click', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({serial, label})
+      });
+      const j = await r.json();
+      if(j.success){
+        msg.innerText = j.clicked ? '✅ 已点击（模板命中）' : '❌ 未命中模板（可尝试：先“保存并入库”或补充更多模板）';
+      }else{
+        msg.innerText = '❌ 点击失败：' + (j.msg || 'unknown');
+      }
+    });
+  });
+}
+
+async function extractCandidates(){
+  const serial = (document.getElementById('serial').value || '').trim();
+  if(!serial){
+    alert('请先填写设备序列号 / IP:PORT');
+    return;
+  }
+  const btn = document.getElementById('btnExtract');
+  btn.disabled = true;
+  btn.innerText = '提取中...';
+  try{
+    const r = await fetch('/api/ui/extract_candidates', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({serial, max_items: 120})
+    });
+    const j = await r.json();
+    if(!j.success){
+      alert(j.msg || '提取失败');
+      return;
+    }
+    const n = (j.result?.candidates || []).length;
+    alert(`✅ 提取完成：生成 ${n} 张候选图标（scripts/ui_candidates/）`);
+    await loadList();
+  }finally{
+    btn.disabled = false;
+    btn.innerText = '从当前界面提取 UI 候选';
+  }
+}
+
+document.getElementById('btnReload').addEventListener('click', loadList);
+document.getElementById('btnExtract').addEventListener('click', extractCandidates);
+document.getElementById('q').addEventListener('input', render);
+document.getElementById('onlyUnlabeled').addEventListener('change', render);
+document.getElementById('onlyLabeled').addEventListener('change', render);
+
+loadList();
+</script>
+{% endblock %}

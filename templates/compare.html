@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}差异对比工具{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold">⚔️ 截图差异对比</h1>
+    <div class="flex items-center gap-3">
+        {% if baseline_rid %}
+        <span class="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full border border-emerald-200">⭐ 已设置对比模板</span>
+        <button onclick="applyBaselineToLeft()" class="text-xs bg-emerald-600 text-white px-3 py-1 rounded hover:bg-emerald-700">一键填入左侧</button>
+        {% endif %}
+        <a href="/" class="text-blue-600 hover:underline">返回主页</a>
+    </div>
+</div>
+
+<div class="bg-white p-4 rounded shadow mb-6 grid grid-cols-2 gap-8">
+    <div class="space-y-2">
+        <h3 class="font-bold text-gray-500 border-b pb-1">左侧视图 (基准)</h3>
+        <select id="leftRecord" class="w-full border p-2 rounded" onchange="loadDevices('left')">
+            <option value="">选择日期记录...</option>
+            {% for rid, item in history.items() %}
+            <option value="{{ rid }}">{{ item.date }} ({{ item.timestamp }})</option>
+            {% endfor %}
+        </select>
+        <div class="flex gap-2">
+            <select id="leftDevice" class="w-1/2 border p-2 rounded" onchange="renderImage('left')">
+                <option value="">先选记录...</option>
+            </select>
+            <select id="leftMode" class="w-1/2 border p-2 rounded" onchange="renderImage('left')">
+                <option value="extreme">极致</option>
+                <option value="balanced" selected>均衡</option>
+                <option value="power">省电</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="space-y-2">
+        <h3 class="font-bold text-gray-500 border-b pb-1">右侧视图 (对比)</h3>
+        <select id="rightRecord" class="w-full border p-2 rounded" onchange="loadDevices('right')">
+            <option value="">选择日期记录...</option>
+            {% for rid, item in history.items() %}
+            <option value="{{ rid }}">{{ item.date }} ({{ item.timestamp }})</option>
+            {% endfor %}
+        </select>
+        <div class="flex gap-2">
+            <select id="rightDevice" class="w-1/2 border p-2 rounded" onchange="renderImage('right')">
+                <option value="">先选记录...</option>
+            </select>
+            <select id="rightMode" class="w-1/2 border p-2 rounded" onchange="renderImage('right')">
+                <option value="extreme">极致</option>
+                <option value="balanced" selected>均衡</option>
+                <option value="power">省电</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 gap-4 h-[600px]">
+    <div id="leftContainer" class="bg-gray-100 rounded border flex items-center justify-center overflow-auto relative">
+        <p class="text-gray-400">请选择左侧参数</p>
+    </div>
+    <div id="rightContainer" class="bg-gray-100 rounded border flex items-center justify-center overflow-auto relative">
+        <p class="text-gray-400">请选择右侧参数</p>
+    </div>
+</div>
+
+<script>
+    const BASELINE_RID = "{{ baseline_rid or '' }}";
+    const cache = {}; // 缓存报告数据
+
+    function applyBaselineToLeft(){
+        if(!BASELINE_RID){
+            alert('尚未设置对比模板...');
+            return;
+        }
+        const sel = document.getElementById('leftRecord');
+        sel.value = BASELINE_RID;
+        loadDevices('left');
+    }
+
+    // 页面进入时：若已设置模板，自动填入左侧作为基准
+    document.addEventListener('DOMContentLoaded', () => {
+        if(BASELINE_RID){
+            applyBaselineToLeft();
+        }
+    });
+
+    async function loadDevices(side) {
+        const rid = document.getElementById(side + 'Record').value;
+        const devSelect = document.getElementById(side + 'Device');
+        devSelect.innerHTML = '<option>加载中...</option>';
+        
+        if (!rid) return;
+
+        if (!cache[rid]) {
+            const res = await fetch(`/api/report_data/${rid}`);
+            const json = await res.json();
+            if (json.success) cache[rid] = json.data;
+        }
+
+        const data = cache[rid];
+        devSelect.innerHTML = '';
+        Object.keys(data.devices).forEach(dev => {
+            devSelect.innerHTML += `<option value="${dev}">${dev}</option>`;
+        });
+        
+        // 尝试自动同步另一侧的设备选择
+        renderImage(side);
+    }
+
+    function renderImage(side) {
+        const rid = document.getElementById(side + 'Record').value;
+        const device = document.getElementById(side + 'Device').value;
+        const mode = document.getElementById(side + 'Mode').value;
+        const container = document.getElementById(side + 'Container');
+
+        if (!rid || !device || !cache[rid]) return;
+
+        const images = cache[rid].devices[device][mode];
+        
+        if (images && images.length > 0) {
+            // 这里默认取第一张，如果有多个图片需要更复杂的UI
+            const img = images[0]; 
+            container.innerHTML = `
+                <img src="${img.path}" class="max-w-full h-auto shadow-lg">
+                <div class="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 text-xs rounded">
+                    ${img.filename}
+                </div>
+            `;
+        } else {
+            container.innerHTML = `<p class="text-gray-400">该条件下无图片</p>`;
+        }
+    }
+
+    function applyBaselineToLeft(){
+        if(!BASELINE_RID){
+            alert('当前未设置对比模板');
+            return;
+        }
+        const sel = document.getElementById('leftRecord');
+        sel.value = BASELINE_RID;
+        loadDevices('left');
+    }
+
+    // 页面加载后：如果已有模板，自动填入左侧基准
+    document.addEventListener('DOMContentLoaded', () => {
+        if(BASELINE_RID){
+            const sel = document.getElementById('leftRecord');
+            // 仅在未手动选择时自动填充
+            if(!sel.value){
+                sel.value = BASELINE_RID;
+                loadDevices('left');
+            }
+        }
+    });
+async function autoCloudConnect() {
+    const res = await fetch('/api/cloud/auto_connect_fav', {
+        method: 'POST'
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+        alert("失败：" + data.msg);
+        return;
+    }
+
+    // 自动填入 adb 地址
+    document.getElementById("adbInput").value = data.adb;
+
+    // 更新列表
+    if (data.results) {
+        data.results.forEach(updateDeviceList);
+        renderDeviceList();
+    }
+
+    alert("已自动连接：" + data.adb);
+}
+
+async function runLoginOnly() {
+    // 确保设备已连接
+    if (connectedDevicesList.length === 0) {
+        alert("⚠️ 请先连接设备。");
+        toggleAdminPanel(true);
+        return;
+    }
+
+    const targetIPs = connectedDevicesList.map(d => d.ip);
+    if(!confirm(`确认开始【新包登录】？\n\n🎯 目标设备：${targetIPs.length} 台\n📲 将依次执行：启动游戏 + 自动登录 + 首次打开确认流程`)) {
+        return;
+    }
+
+    setUIRunning();
+    document.getElementById('logWindow').innerHTML = '<p class="text-gray-500">>>> 自动登录任务初始化中...</p>';
+
+    try {
+        await fetch('/api/run_login_only', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                target_devices: targetIPs
+                // 不需要 tasks，后端会只执行登录
+            })
+        });
+        // 日志与结束状态仍然由 WebSocket 推送，不需要轮询
+    } catch (e) {
+        console.error(e);
+        alert("无法连接服务器");
+        setUIStopped();
+    }
+}
+
+</script>
+{% endblock %}
